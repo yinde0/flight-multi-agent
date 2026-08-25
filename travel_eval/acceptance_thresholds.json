@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "automated_replay_metrics": {
+    "scenario_pass_rate": {
+      "minimum": 1.0,
+      "release_gate": true
+    },
+    "notification_precision": {
+      "minimum": 0.9,
+      "release_gate": true
+    },
+    "material_disruption_recall": {
+      "minimum": 0.95,
+      "release_gate": true
+    },
+    "duplicate_notification_rate": {
+      "maximum": 0.005,
+      "release_gate": true
+    },
+    "unauthorized_notification_count": {
+      "maximum": 0,
+      "release_gate": true
+    }
+  },
+  "offline_document_metrics": {
+    "supported_template_whole_itinerary_exact_match": {
+      "minimum": 0.95,
+      "release_gate": true
+    },
+    "flight_number_field_recall": {
+      "minimum": 0.99,
+      "release_gate": true
+    },
+    "scheduled_time_field_recall": {
+      "minimum": 0.98,
+      "release_gate": true
+    },
+    "low_confidence_abstention_recall": {
+      "minimum": 0.95,
+      "release_gate": true
+    }
+  },
+  "production_shadow_metrics": {
+    "cancellation_and_diversion_recall": {
+      "minimum": 1.0,
+      "release_gate": true
+    },
+    "p95_detection_latency_seconds": {
+      "maximum": 360,
+      "release_gate": true
+    },
+    "notifications_per_active_trip_p95": {
+      "maximum": 2,
+      "release_gate": false
+    }
+  }
+}

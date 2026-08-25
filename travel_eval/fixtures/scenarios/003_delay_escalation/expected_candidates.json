@@ -1,0 +1,26 @@
+[
+  {
+    "candidate_id": "cand-delay-escalation-001",
+    "category": "DELAY",
+    "delay_minutes": 10,
+    "delta": {"delay_minutes_before": 0, "delay_minutes_after": 10}
+  },
+  {
+    "candidate_id": "cand-delay-escalation-002",
+    "category": "DELAY",
+    "delay_minutes": 35,
+    "delta": {"delay_minutes_before": 10, "delay_minutes_after": 35}
+  },
+  {
+    "candidate_id": "cand-delay-escalation-003",
+    "category": "DELAY",
+    "delay_minutes": 40,
+    "delta": {"delay_minutes_before": 35, "delay_minutes_after": 40}
+  },
+  {
+    "candidate_id": "cand-delay-escalation-004",
+    "category": "DELAY",
+    "delay_minutes": 95,
+    "delta": {"delay_minutes_before": 40, "delay_minutes_after": 95}
+  }
+]

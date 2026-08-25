@@ -1,0 +1,7 @@
+[
+  {
+    "candidate_id": "cand-weather-only-001",
+    "verdict": "SUPPRESS",
+    "reason_codes": ["WEATHER_UNCORROBORATED"]
+  }
+]

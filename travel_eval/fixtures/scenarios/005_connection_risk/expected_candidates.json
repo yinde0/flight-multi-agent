@@ -1,0 +1,10 @@
+[
+  {
+    "candidate_id": "cand-connection-risk-001",
+    "category": "CONNECTION_RISK",
+    "delay_minutes": 30,
+    "connection_buffer_minutes": 40,
+    "minimum_connection_minutes": 45,
+    "score": 0.9215
+  }
+]

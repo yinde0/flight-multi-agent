@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "trip-fixture-connection",
+  "traveler_ref": "traveler-synthetic-001",
+  "confirmation_codes": ["SB8M2P"],
+  "legs": [
+    {
+      "leg_id": "leg-fixture-connection-1",
+      "marketing_carrier": "SB",
+      "operating_carrier": "SB",
+      "flight_number": "SB410",
+      "origin": "MAN",
+      "destination": "FRA",
+      "scheduled_departure_at": "2026-09-20T07:10:00Z",
+      "scheduled_arrival_at": "2026-09-20T08:55:00Z",
+      "minimum_connection_minutes": 45
+    },
+    {
+      "leg_id": "leg-fixture-connection-2",
+      "marketing_carrier": "SB",
+      "operating_carrier": "SB",
+      "flight_number": "SB882",
+      "origin": "FRA",
+      "destination": "ATH",
+      "scheduled_departure_at": "2026-09-20T10:10:00Z",
+      "scheduled_arrival_at": "2026-09-20T13:00:00Z"
+    }
+  ]
+}

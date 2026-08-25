@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/itinerary.schema.json",
+  "title": "Canonical Itinerary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "trip_id", "traveler_ref", "confirmation_codes", "legs"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "trip_id": {"type": "string", "pattern": "^trip-[a-z0-9-]+$"},
+    "traveler_ref": {"type": "string", "description": "Opaque identifier; no passenger name or contact data."},
+    "confirmation_codes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[A-Z0-9*]{4,10}$"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "legs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/leg"}
+    },
+    "source_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_id", "sha256"],
+      "properties": {
+        "fixture_id": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  },
+  "$defs": {
+    "timestamp": {"type": "string", "format": "date-time"},
+    "airport": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "carrier": {"type": "string", "pattern": "^[A-Z0-9]{2,3}$"},
+    "leg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg_id", "marketing_carrier", "flight_number", "origin", "destination",
+        "scheduled_departure_at", "scheduled_arrival_at"
+      ],
+      "properties": {
+        "leg_id": {"type": "string", "pattern": "^leg-[a-z0-9-]+$"},
+        "marketing_carrier": {"$ref": "#/$defs/carrier"},
+        "operating_carrier": {"$ref": "#/$defs/carrier"},
+        "flight_number": {"type": "string", "pattern": "^[A-Z0-9]{2,3}[0-9]{1,4}$"},
+        "origin": {"$ref": "#/$defs/airport"},
+        "destination": {"$ref": "#/$defs/airport"},
+        "scheduled_departure_at": {"$ref": "#/$defs/timestamp"},
+        "scheduled_arrival_at": {"$ref": "#/$defs/timestamp"},
+        "minimum_connection_minutes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

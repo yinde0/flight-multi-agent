@@ -1,0 +1,22 @@
+[
+  {
+    "candidate_id": "cand-delay-escalation-001",
+    "verdict": "SUPPRESS",
+    "reason_codes": ["DELAY_BELOW_NOTIFY_THRESHOLD"]
+  },
+  {
+    "candidate_id": "cand-delay-escalation-002",
+    "verdict": "NOTIFY",
+    "reason_codes": ["DELAY_NOTIFY_THRESHOLD"]
+  },
+  {
+    "candidate_id": "cand-delay-escalation-003",
+    "verdict": "SUPPRESS",
+    "reason_codes": ["DUPLICATE_SEVERITY_BAND"]
+  },
+  {
+    "candidate_id": "cand-delay-escalation-004",
+    "verdict": "NOTIFY_AND_SEARCH",
+    "reason_codes": ["DELAY_SEARCH_THRESHOLD"]
+  }
+]

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/observation.schema.json",
+  "title": "Canonical Flight Observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "observation_id", "trip_id", "leg_id", "observed_at",
+    "source", "source_event_time", "status", "departure", "arrival",
+    "weather", "data_freshness_seconds", "confidence"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "observation_id": {"type": "string"},
+    "trip_id": {"type": "string"},
+    "leg_id": {"type": "string"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "source": {"type": "string"},
+    "source_event_time": {"type": "string", "format": "date-time"},
+    "status": {
+      "enum": ["unknown", "scheduled", "active", "landed", "cancelled", "diverted"]
+    },
+    "departure": {"$ref": "#/$defs/movement"},
+    "arrival": {"$ref": "#/$defs/movement"},
+    "weather": {"$ref": "#/$defs/weather"},
+    "data_freshness_seconds": {"type": "integer", "minimum": 0},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "$defs": {
+    "nullableTimestamp": {
+      "anyOf": [{"type": "string", "format": "date-time"}, {"type": "null"}]
+    },
+    "nullableString": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    "movement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheduled_at", "estimated_at", "actual_at", "terminal", "gate"],
+      "properties": {
+        "scheduled_at": {"type": "string", "format": "date-time"},
+        "estimated_at": {"$ref": "#/$defs/nullableTimestamp"},
+        "actual_at": {"$ref": "#/$defs/nullableTimestamp"},
+        "terminal": {"$ref": "#/$defs/nullableString"},
+        "gate": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "weather": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["airport", "valid_at", "risk_level", "alerts"],
+      "properties": {
+        "airport": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "valid_at": {"type": "string", "format": "date-time"},
+        "risk_level": {"enum": ["none", "low", "moderate", "high", "severe"]},
+        "alerts": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    }
+  }
+}

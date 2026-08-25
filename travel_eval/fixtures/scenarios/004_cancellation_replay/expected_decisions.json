@@ -1,0 +1,7 @@
+[
+  {
+    "candidate_id": "cand-cancellation-replay-001",
+    "verdict": "NOTIFY_AND_SEARCH",
+    "reason_codes": ["FLIGHT_CANCELLED"]
+  }
+]

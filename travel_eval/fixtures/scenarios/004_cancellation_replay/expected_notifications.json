@@ -1,0 +1,7 @@
+[
+  {
+    "decision_id": "decision-cancellation-replay-001",
+    "search_requested": true,
+    "idempotency_key": "trip-eval-cancel:leg-eval-cancel-1:CANCELLATION:3"
+  }
+]

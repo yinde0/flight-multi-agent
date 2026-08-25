@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "gate-churn",
+  "description": "Two gate-only changes are stored but never notified.",
+  "base_observation": {
+    "schema_version": "1.0.0",
+    "trip_id": "trip-eval-gate",
+    "leg_id": "leg-eval-gate-1",
+    "source": "mock-aviationstack",
+    "status": "scheduled",
+    "departure": {
+      "scheduled_at": "2026-09-02T10:00:00Z",
+      "estimated_at": "2026-09-02T10:00:00Z",
+      "actual_at": null,
+      "terminal": "1",
+      "gate": "B10"
+    },
+    "arrival": {
+      "scheduled_at": "2026-09-02T12:00:00Z",
+      "estimated_at": "2026-09-02T12:00:00Z",
+      "actual_at": null,
+      "terminal": "2",
+      "gate": null
+    },
+    "weather": {
+      "airport": "LHR",
+      "valid_at": "2026-09-02T10:00:00Z",
+      "risk_level": "none",
+      "alerts": []
+    },
+    "data_freshness_seconds": 45,
+    "confidence": 0.99
+  },
+  "timeline": [
+    {
+      "received_at": "2026-09-02T08:00:00Z",
+      "observation_id": "obs-gate-001",
+      "source_event_time": "2026-09-02T07:59:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-02T08:10:00Z",
+      "observation_id": "obs-gate-002",
+      "source_event_time": "2026-09-02T08:09:00Z",
+      "changes": {"departure": {"gate": "B12"}}
+    },
+    {
+      "received_at": "2026-09-02T08:20:00Z",
+      "observation_id": "obs-gate-003",
+      "source_event_time": "2026-09-02T08:19:00Z",
+      "changes": {"departure": {"gate": "B14"}}
+    }
+  ]
+}

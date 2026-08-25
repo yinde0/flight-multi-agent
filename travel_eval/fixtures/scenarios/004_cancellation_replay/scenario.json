@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "cancellation-replay",
+  "description": "A cancellation notifies once; an identical update is silent and a stale regression is ignored.",
+  "base_observation": {
+    "schema_version": "1.0.0",
+    "trip_id": "trip-eval-cancel",
+    "leg_id": "leg-eval-cancel-1",
+    "source": "mock-aviationstack",
+    "status": "scheduled",
+    "departure": {
+      "scheduled_at": "2026-09-04T10:00:00Z",
+      "estimated_at": "2026-09-04T10:00:00Z",
+      "actual_at": null,
+      "terminal": "1",
+      "gate": "D4"
+    },
+    "arrival": {
+      "scheduled_at": "2026-09-04T12:00:00Z",
+      "estimated_at": "2026-09-04T12:00:00Z",
+      "actual_at": null,
+      "terminal": "2",
+      "gate": null
+    },
+    "weather": {
+      "airport": "LHR",
+      "valid_at": "2026-09-04T10:00:00Z",
+      "risk_level": "moderate",
+      "alerts": []
+    },
+    "data_freshness_seconds": 30,
+    "confidence": 0.99
+  },
+  "timeline": [
+    {
+      "received_at": "2026-09-04T08:00:00Z",
+      "observation_id": "obs-cancel-001",
+      "source_event_time": "2026-09-04T07:59:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-04T08:05:00Z",
+      "observation_id": "obs-cancel-002",
+      "source_event_time": "2026-09-04T08:04:00Z",
+      "changes": {"status": "cancelled"}
+    },
+    {
+      "received_at": "2026-09-04T08:07:00Z",
+      "observation_id": "obs-cancel-003",
+      "source_event_time": "2026-09-04T08:06:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-04T08:10:00Z",
+      "observation_id": "obs-cancel-stale",
+      "source_event_time": "2026-09-04T08:03:00Z",
+      "changes": {"status": "scheduled"}
+    }
+  ]
+}

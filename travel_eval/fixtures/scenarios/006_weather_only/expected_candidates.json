@@ -1,0 +1,9 @@
+[
+  {
+    "candidate_id": "cand-weather-only-001",
+    "category": "WEATHER_RISK",
+    "weather_risk_level": "severe",
+    "score": 0.405,
+    "delta": {"changed_fields": ["weather.risk_level", "weather.alerts"]}
+  }
+]

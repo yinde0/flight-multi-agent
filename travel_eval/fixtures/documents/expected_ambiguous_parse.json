@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "fixture_id": "doc-ambiguous-scan",
+  "review_required": true,
+  "reason_codes": [
+    "CONFIRMATION_CODE_REDACTED",
+    "LOW_OCR_CONFIDENCE_FLIGHT_NUMBER",
+    "LOW_OCR_CONFIDENCE_DEPARTURE_TIME"
+  ],
+  "safe_partial_extraction": {
+    "origin": "LHR",
+    "destination": "LIS",
+    "travel_date": "2026-10-18"
+  },
+  "must_not_infer": ["confirmation_code", "flight_number", "scheduled_departure_at"]
+}

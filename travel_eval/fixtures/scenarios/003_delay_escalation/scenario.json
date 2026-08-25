@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "delay-escalation",
+  "description": "A delay crosses notify and rebooking-search thresholds without repeat spam.",
+  "base_observation": {
+    "schema_version": "1.0.0",
+    "trip_id": "trip-eval-delay",
+    "leg_id": "leg-eval-delay-1",
+    "source": "mock-aviationstack",
+    "status": "scheduled",
+    "departure": {
+      "scheduled_at": "2026-09-03T10:00:00Z",
+      "estimated_at": "2026-09-03T10:00:00Z",
+      "actual_at": null,
+      "terminal": "1",
+      "gate": "C2"
+    },
+    "arrival": {
+      "scheduled_at": "2026-09-03T12:00:00Z",
+      "estimated_at": "2026-09-03T12:00:00Z",
+      "actual_at": null,
+      "terminal": "2",
+      "gate": null
+    },
+    "weather": {
+      "airport": "LHR",
+      "valid_at": "2026-09-03T10:00:00Z",
+      "risk_level": "low",
+      "alerts": []
+    },
+    "data_freshness_seconds": 60,
+    "confidence": 0.98
+  },
+  "timeline": [
+    {
+      "received_at": "2026-09-03T08:00:00Z",
+      "observation_id": "obs-delay-001",
+      "source_event_time": "2026-09-03T07:59:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-03T08:10:00Z",
+      "observation_id": "obs-delay-002",
+      "source_event_time": "2026-09-03T08:09:00Z",
+      "changes": {
+        "departure": {"estimated_at": "2026-09-03T10:10:00Z"},
+        "arrival": {"estimated_at": "2026-09-03T12:10:00Z"}
+      }
+    },
+    {
+      "received_at": "2026-09-03T08:20:00Z",
+      "observation_id": "obs-delay-003",
+      "source_event_time": "2026-09-03T08:19:00Z",
+      "changes": {
+        "departure": {"estimated_at": "2026-09-03T10:35:00Z"},
+        "arrival": {"estimated_at": "2026-09-03T12:35:00Z"}
+      }
+    },
+    {
+      "received_at": "2026-09-03T08:30:00Z",
+      "observation_id": "obs-delay-004",
+      "source_event_time": "2026-09-03T08:29:00Z",
+      "changes": {
+        "departure": {"estimated_at": "2026-09-03T10:40:00Z"},
+        "arrival": {"estimated_at": "2026-09-03T12:40:00Z"}
+      }
+    },
+    {
+      "received_at": "2026-09-03T08:40:00Z",
+      "observation_id": "obs-delay-005",
+      "source_event_time": "2026-09-03T08:39:00Z",
+      "changes": {
+        "departure": {"estimated_at": "2026-09-03T11:35:00Z"},
+        "arrival": {"estimated_at": "2026-09-03T13:35:00Z"}
+      }
+    }
+  ]
+}

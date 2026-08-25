@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/delta.schema.json",
+  "title": "Flight State Delta",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "delta_id", "trip_id", "leg_id", "previous_observation_id",
+    "current_observation_id", "observed_at", "changed_fields", "delay_minutes_before",
+    "delay_minutes_after", "delay_change_minutes"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "delta_id": {"type": "string"},
+    "trip_id": {"type": "string"},
+    "leg_id": {"type": "string"},
+    "previous_observation_id": {"type": "string"},
+    "current_observation_id": {"type": "string"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "changed_fields": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+    "delay_minutes_before": {"type": "integer", "minimum": 0},
+    "delay_minutes_after": {"type": "integer", "minimum": 0},
+    "delay_change_minutes": {"type": "integer"}
+  }
+}

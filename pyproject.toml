@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "travel-disruption-evaluation"
+version = "0.1.0"
+description = "Evaluation-first specification and replay harness for itinerary disruption monitoring"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+validation = ["jsonschema>=4.23,<5"]
+pdf-fixtures = ["reportlab>=4,<5", "pillow>=10,<12", "pypdf>=5,<7", "pdfplumber>=0.11,<1", "pypdfium2>=4,<6"]
+
+[project.scripts]
+travel-eval = "travel_eval.runner:main"
+
+[tool.setuptools.packages.find]
+include = ["travel_eval*"]
+
+[tool.setuptools.package-data]
+travel_eval = [
+  "acceptance_thresholds.json",
+  "schemas/*.json",
+  "policies/*.json",
+  "fixtures/**/*.json"
+]

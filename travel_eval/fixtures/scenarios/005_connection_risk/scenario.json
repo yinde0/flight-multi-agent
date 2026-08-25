@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "connection-risk",
+  "description": "A 25-minute departure delay and 30-minute arrival delay break the minimum connection buffer.",
+  "base_observation": {
+    "schema_version": "1.0.0",
+    "trip_id": "trip-eval-connect",
+    "leg_id": "leg-eval-connect-1",
+    "source": "mock-aviationstack",
+    "status": "scheduled",
+    "departure": {
+      "scheduled_at": "2026-09-05T09:00:00Z",
+      "estimated_at": "2026-09-05T09:00:00Z",
+      "actual_at": null,
+      "terminal": "1",
+      "gate": "E6"
+    },
+    "arrival": {
+      "scheduled_at": "2026-09-05T10:30:00Z",
+      "estimated_at": "2026-09-05T10:30:00Z",
+      "actual_at": null,
+      "terminal": "2",
+      "gate": null
+    },
+    "weather": {
+      "airport": "AMS",
+      "valid_at": "2026-09-05T09:00:00Z",
+      "risk_level": "none",
+      "alerts": []
+    },
+    "data_freshness_seconds": 30,
+    "confidence": 0.97
+  },
+  "connection_context": {
+    "leg-eval-connect-1": {
+      "next_departure_at": "2026-09-05T11:40:00Z",
+      "minimum_connection_minutes": 45
+    }
+  },
+  "timeline": [
+    {
+      "received_at": "2026-09-05T07:00:00Z",
+      "observation_id": "obs-connect-001",
+      "source_event_time": "2026-09-05T06:59:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-05T07:10:00Z",
+      "observation_id": "obs-connect-002",
+      "source_event_time": "2026-09-05T07:09:00Z",
+      "changes": {
+        "departure": {"estimated_at": "2026-09-05T09:25:00Z"},
+        "arrival": {"estimated_at": "2026-09-05T11:00:00Z"}
+      }
+    }
+  ]
+}

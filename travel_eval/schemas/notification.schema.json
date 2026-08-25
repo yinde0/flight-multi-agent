@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/notification.schema.json",
+  "title": "Approved Notification Action",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "notification_id", "decision_id", "trip_id", "leg_id", "created_at",
+    "channel", "template", "reason_codes", "search_requested", "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "notification_id": {"type": "string"},
+    "decision_id": {"type": "string"},
+    "trip_id": {"type": "string"},
+    "leg_id": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "channel": {"enum": ["push", "email", "sms"]},
+    "template": {"type": "string"},
+    "reason_codes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "search_requested": {"type": "boolean"},
+    "idempotency_key": {"type": "string", "minLength": 1}
+  }
+}

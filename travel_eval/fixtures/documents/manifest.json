@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "generated_by": "tools/generate_pdf_fixtures.py",
+  "fixtures": [
+    {
+      "fixture_id": "doc-direct-clean",
+      "path": "output/pdf/synthetic_direct_eticket.pdf",
+      "sha256": "33adfc36471e8f646be28659b4337a8690584c5b49589df492704ed0b56331b3",
+      "expected": "travel_eval/fixtures/documents/expected_direct_itinerary.json",
+      "classification": "synthetic-clean-pdf"
+    },
+    {
+      "fixture_id": "doc-connection-clean",
+      "path": "output/pdf/synthetic_connection_itinerary.pdf",
+      "sha256": "5cff9a00029115cdb3d0d889da0a0e286038ce007f415649ccaae8b74a52bd50",
+      "expected": "travel_eval/fixtures/documents/expected_connection_itinerary.json",
+      "classification": "synthetic-clean-pdf"
+    },
+    {
+      "fixture_id": "doc-ambiguous-scan",
+      "path": "output/pdf/redacted_ambiguous_scan.pdf",
+      "sha256": "227d6889d4a7beb4f547579c0d70023aeac9d4eb6055318e08c61b14b61a1fbe",
+      "expected": "travel_eval/fixtures/documents/expected_ambiguous_parse.json",
+      "classification": "synthetic-raster-scan"
+    }
+  ]
+}

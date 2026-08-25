@@ -1,0 +1,12 @@
+[
+  {
+    "candidate_id": "cand-cancellation-replay-001",
+    "category": "CANCELLATION",
+    "score": 0.99,
+    "delta": {
+      "changed_fields": ["status"],
+      "previous_observation_id": "obs-cancel-001",
+      "current_observation_id": "obs-cancel-002"
+    }
+  }
+]

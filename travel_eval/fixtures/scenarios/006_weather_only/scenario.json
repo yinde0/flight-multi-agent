@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "weather-only",
+  "description": "A severe forecast without an operational flight impact is retained but suppressed.",
+  "base_observation": {
+    "schema_version": "1.0.0",
+    "trip_id": "trip-eval-weather",
+    "leg_id": "leg-eval-weather-1",
+    "source": "mock-flight-and-weather",
+    "status": "scheduled",
+    "departure": {
+      "scheduled_at": "2026-09-06T10:00:00Z",
+      "estimated_at": "2026-09-06T10:00:00Z",
+      "actual_at": null,
+      "terminal": "1",
+      "gate": "F8"
+    },
+    "arrival": {
+      "scheduled_at": "2026-09-06T12:00:00Z",
+      "estimated_at": "2026-09-06T12:00:00Z",
+      "actual_at": null,
+      "terminal": "2",
+      "gate": null
+    },
+    "weather": {
+      "airport": "LHR",
+      "valid_at": "2026-09-06T10:00:00Z",
+      "risk_level": "low",
+      "alerts": []
+    },
+    "data_freshness_seconds": 120,
+    "confidence": 0.9
+  },
+  "timeline": [
+    {
+      "received_at": "2026-09-06T08:00:00Z",
+      "observation_id": "obs-weather-001",
+      "source_event_time": "2026-09-06T07:59:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-06T08:10:00Z",
+      "observation_id": "obs-weather-002",
+      "source_event_time": "2026-09-06T08:09:00Z",
+      "changes": {
+        "weather": {
+          "risk_level": "severe",
+          "alerts": ["SEVERE_THUNDERSTORM_WATCH"]
+        }
+      }
+    }
+  ]
+}

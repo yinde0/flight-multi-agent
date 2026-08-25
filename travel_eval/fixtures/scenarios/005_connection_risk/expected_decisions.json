@@ -1,0 +1,7 @@
+[
+  {
+    "candidate_id": "cand-connection-risk-001",
+    "verdict": "NOTIFY_AND_SEARCH",
+    "reason_codes": ["CONNECTION_BELOW_MINIMUM"]
+  }
+]

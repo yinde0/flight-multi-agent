@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "policy_version": "1.0.0",
+  "effective_from": "2026-08-25T00:00:00Z",
+  "description": "Initial deterministic notification and rebooking-search policy.",
+  "thresholds": {
+    "delay_minutes": {
+      "notify": 30,
+      "search": 90
+    },
+    "default_minimum_connection_minutes": 45,
+    "cooldown_minutes": 60
+  },
+  "ordered_rules": [
+    {
+      "rule_id": "P001",
+      "when": "category == CANCELLATION",
+      "verdict": "NOTIFY_AND_SEARCH",
+      "reason_code": "FLIGHT_CANCELLED"
+    },
+    {
+      "rule_id": "P002",
+      "when": "category == DIVERSION",
+      "verdict": "NOTIFY_AND_SEARCH",
+      "reason_code": "FLIGHT_DIVERTED"
+    },
+    {
+      "rule_id": "P003",
+      "when": "connection_buffer_minutes < minimum_connection_minutes",
+      "verdict": "NOTIFY_AND_SEARCH",
+      "reason_code": "CONNECTION_BELOW_MINIMUM"
+    },
+    {
+      "rule_id": "P004",
+      "when": "delay_minutes >= 90",
+      "verdict": "NOTIFY_AND_SEARCH",
+      "reason_code": "DELAY_SEARCH_THRESHOLD"
+    },
+    {
+      "rule_id": "P005",
+      "when": "delay_minutes >= 30",
+      "verdict": "NOTIFY",
+      "reason_code": "DELAY_NOTIFY_THRESHOLD"
+    },
+    {
+      "rule_id": "P006",
+      "when": "category in [GATE_CHANGE, TERMINAL_CHANGE]",
+      "verdict": "SUPPRESS",
+      "reason_code": "LOCATION_ONLY_CHANGE"
+    },
+    {
+      "rule_id": "P007",
+      "when": "category == WEATHER_RISK and no operational impact",
+      "verdict": "SUPPRESS",
+      "reason_code": "WEATHER_UNCORROBORATED"
+    },
+    {
+      "rule_id": "P008",
+      "when": "severity_band <= highest_notified_band for episode",
+      "verdict": "SUPPRESS",
+      "reason_code": "DUPLICATE_SEVERITY_BAND"
+    }
+  ],
+  "safety_invariants": [
+    "A suppressed decision cannot create a notification.",
+    "Only NOTIFY_AND_SEARCH may create a rebooking search request.",
+    "No policy decision authorizes booking, cancellation, or payment.",
+    "Every non-suppressed action carries an idempotency key and policy version."
+  ]
+}

@@ -1,0 +1,7 @@
+[
+  {
+    "decision_id": "decision-connection-risk-001",
+    "search_requested": true,
+    "idempotency_key": "trip-eval-connect:leg-eval-connect-1:CONNECTION_RISK:3"
+  }
+]

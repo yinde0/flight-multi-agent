@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "clean-unchanged",
+  "description": "A scheduled direct flight receives a newer but identical provider snapshot.",
+  "base_observation": {
+    "schema_version": "1.0.0",
+    "trip_id": "trip-eval-clean",
+    "leg_id": "leg-eval-clean-1",
+    "source": "mock-aviationstack",
+    "status": "scheduled",
+    "departure": {
+      "scheduled_at": "2026-09-01T10:00:00Z",
+      "estimated_at": "2026-09-01T10:00:00Z",
+      "actual_at": null,
+      "terminal": "1",
+      "gate": "A1"
+    },
+    "arrival": {
+      "scheduled_at": "2026-09-01T12:00:00Z",
+      "estimated_at": "2026-09-01T12:00:00Z",
+      "actual_at": null,
+      "terminal": "2",
+      "gate": null
+    },
+    "weather": {
+      "airport": "LHR",
+      "valid_at": "2026-09-01T10:00:00Z",
+      "risk_level": "none",
+      "alerts": []
+    },
+    "data_freshness_seconds": 60,
+    "confidence": 0.99
+  },
+  "timeline": [
+    {
+      "received_at": "2026-09-01T08:00:00Z",
+      "observation_id": "obs-clean-001",
+      "source_event_time": "2026-09-01T07:59:00Z",
+      "changes": {}
+    },
+    {
+      "received_at": "2026-09-01T08:05:00Z",
+      "observation_id": "obs-clean-002",
+      "source_event_time": "2026-09-01T08:04:00Z",
+      "changes": {}
+    }
+  ]
+}
