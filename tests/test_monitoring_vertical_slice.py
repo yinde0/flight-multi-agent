@@ -40,6 +40,7 @@ class InMemoryMonitoringStore:
         self.candidates: dict[str, dict[str, Any]] = {}
         self.decisions: dict[str, dict[str, Any]] = {}
         self.confirmed_events: dict[str, dict[str, Any]] = {}
+        self.notifications: dict[str, dict[str, Any]] = {}
         self.policy_bands: dict[str, int] = {}
 
     @staticmethod
@@ -72,6 +73,20 @@ class InMemoryMonitoringStore:
 
     def put_candidate(self, candidate: dict[str, Any]) -> None:
         self.candidates[candidate["candidate_id"]] = copy.deepcopy(candidate)
+
+    def get_notification(self, decision_id: str) -> dict[str, Any] | None:
+        return copy.deepcopy(self.notifications.get(decision_id))
+
+    def put_notification(
+        self, decision_id: str, notification: dict[str, Any]
+    ) -> None:
+        self.notifications[decision_id] = copy.deepcopy(notification)
+
+    def wait_for_notification(
+        self, decision_id: str, *, timeout_seconds: float
+    ) -> dict[str, Any] | None:
+        del timeout_seconds
+        return self.get_notification(decision_id)
 
     def get_decision(self, candidate_id: str) -> dict[str, Any] | None:
         return copy.deepcopy(self.decisions.get(candidate_id))

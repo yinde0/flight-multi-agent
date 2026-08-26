@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/notification_command.schema.json",
+  "title": "Post-Eval Notification Command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "notification_id", "idempotency_key", "trip_id", "leg_id",
+    "recipient_ref", "channel", "template", "template_variables",
+    "search_requested", "approval"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "notification_id": {"type": "string", "minLength": 1},
+    "idempotency_key": {"type": "string", "minLength": 1},
+    "trip_id": {"type": "string", "minLength": 1},
+    "leg_id": {"type": "string", "minLength": 1},
+    "recipient_ref": {"type": "string", "pattern": "^traveler:[a-z0-9-]+$"},
+    "channel": {"const": "push"},
+    "template": {"const": "travel_disruption_v1"},
+    "template_variables": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "search_requested": {"type": "boolean"},
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id", "decision_id", "verdict", "policy_version",
+        "reason_codes", "decided_at"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string", "minLength": 1},
+        "decision_id": {"type": "string", "minLength": 1},
+        "verdict": {"enum": ["NOTIFY", "NOTIFY_AND_SEARCH"]},
+        "policy_version": {"type": "string", "minLength": 1},
+        "reason_codes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "decided_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/notification_delivery.schema.json",
+  "title": "Notification Delivery Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "notification_id", "decision_id", "idempotency_key",
+    "provider", "provider_delivery_id", "status", "delivered_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "notification_id": {"type": "string"},
+    "decision_id": {"type": "string"},
+    "idempotency_key": {"type": "string", "minLength": 1},
+    "provider": {"type": "string"},
+    "provider_delivery_id": {"type": "string"},
+    "status": {"enum": ["delivered", "duplicate"]},
+    "delivered_at": {"type": "string", "format": "date-time"}
+  }
+}

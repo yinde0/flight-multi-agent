@@ -80,6 +80,22 @@ and a weather-cleared update; it confirms one 45-minute delay with severe weathe
 as corroborating evidence and continues flight-only when weather is unavailable.
 See [docs/vertical-slice-04.md](docs/vertical-slice-04.md).
 
+## Post-Eval notification vertical slice
+
+The next boundary consumes only `disruption_confirmed`, re-verifies the stored
+Eval decision, and calls an isolated Notification MCP. Its provider is a
+recording sink and cannot contact a real traveler.
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.notification-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_notification_test.py
+docker compose -f compose.yaml -f compose.test.yaml -f compose.notification-test.yaml down
+```
+
+The golden requires exactly one recorded delivery for the approved delay and no
+delivery for every suppressed or unchanged poll. See
+[docs/vertical-slice-05.md](docs/vertical-slice-05.md).
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, and approved notification actions.
@@ -143,9 +159,9 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-The flight-status and weather MCP tools, NATS event path, DynamoDB state adapter,
-Monitoring Agent, and Eval Agent now exist. Later vertical slices will add the
-post-approval notification MCP and rebooking search. RDS and S3 adapters can
+The flight-status, weather, and notification MCP tools, NATS event path, DynamoDB
+state adapter, Monitoring Agent, Eval Agent, and post-Eval action service now
+exist. Later vertical slices will add rebooking search. RDS and S3 adapters can
 replace fixture-backed itinerary inputs
 without changing the canonical contracts. The notification MCP must only be
 reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must

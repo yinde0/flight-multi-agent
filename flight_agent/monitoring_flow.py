@@ -148,6 +148,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "steps": ["mcp.get_flight_status", "fail_closed"],
                         "mcp_calls": 1,
                         "weather_evidence": {"status": "not_requested"},
+                        "notification_action": {"status": "not_required"},
                         "candidate_events_published": 0,
                     },
                 )
@@ -315,6 +316,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         ],
                         "mcp_calls": 2,
                         "weather_evidence": weather_meta,
+                        "notification_action": {"status": "not_required"},
                         "candidate_events_published": 0,
                     },
                 )
@@ -324,6 +326,17 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
         decision, confirmed_event = self._store.wait_for_decision(
             candidate["candidate_id"], timeout_seconds=5
         )
+        notification = None
+        notification_status = "not_required"
+        if decision and confirmed_event:
+            notification = self._store.wait_for_notification(
+                decision["decision_id"], timeout_seconds=5
+            )
+            notification_status = (
+                str(notification["status"])
+                if notification is not None
+                else "pending"
+            )
         return self._set_outcome(
             MonitoringPollOutcome(
                 status="candidate_evaluated" if decision else "evaluation_pending",
@@ -332,6 +345,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                 candidate=candidate,
                 decision=decision,
                 confirmed_event=confirmed_event,
+                notification=notification,
                 orchestration={
                     "framework": "crewai-flow",
                     "steps": [
@@ -340,9 +354,11 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "dynamodb.diff_last_evidence",
                         "nats.publish_disruption_candidate",
                         "eval_agent.consume_candidate",
+                        "notification_action.consume_confirmed",
                     ],
                     "mcp_calls": 2,
                     "weather_evidence": weather_meta,
+                    "notification_action": {"status": notification_status},
                     "candidate_events_published": 1,
                 },
             )
@@ -380,6 +396,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                 ],
                 "mcp_calls": 2,
                 "weather_evidence": weather_meta,
+                "notification_action": {"status": "not_required"},
                 "candidate_events_published": 0,
             },
         )

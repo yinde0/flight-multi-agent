@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Golden notification authority results layered on the seven-poll weather-corroboration timeline.",
+  "polls": [
+    {"status": "baseline_stored", "candidate_published": false, "notification_status": "not_required"},
+    {"status": "candidate_evaluated", "category": "WEATHER_RISK", "verdict": "SUPPRESS", "confirmed": false, "notification_status": "not_required", "notification_recorded": false},
+    {"status": "candidate_evaluated", "category": "WEATHER_RISK", "verdict": "SUPPRESS", "confirmed": false, "notification_status": "not_required", "notification_recorded": false},
+    {"status": "candidate_evaluated", "category": "DELAY", "verdict": "NOTIFY", "confirmed": true, "notification_status": "delivered", "notification_recorded": true, "provider": "recording"},
+    {"status": "unchanged", "candidate_published": false, "notification_status": "not_required"},
+    {"status": "candidate_evaluated", "category": "WEATHER_RISK", "verdict": "SUPPRESS", "confirmed": false, "notification_status": "not_required", "notification_recorded": false},
+    {"status": "unchanged", "candidate_published": false, "notification_status": "not_required"}
+  ]
+}

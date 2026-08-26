@@ -33,6 +33,16 @@ class MonitoringStore(Protocol):
 
     def put_candidate(self, candidate: dict[str, Any]) -> None: ...
 
+    def get_notification(self, decision_id: str) -> dict[str, Any] | None: ...
+
+    def put_notification(
+        self, decision_id: str, notification: dict[str, Any]
+    ) -> None: ...
+
+    def wait_for_notification(
+        self, decision_id: str, *, timeout_seconds: float
+    ) -> dict[str, Any] | None: ...
+
     def get_decision(self, candidate_id: str) -> dict[str, Any] | None: ...
 
     def put_decision(self, candidate_id: str, decision: dict[str, Any]) -> None: ...
@@ -184,6 +194,25 @@ class DynamoMonitoringStateStore:
             f"CANDIDATE#{candidate['candidate_id']}",
             candidate,
         )
+
+    def get_notification(self, decision_id: str) -> dict[str, Any] | None:
+        return self._payload(self._get(f"DECISION#{decision_id}", "NOTIFICATION"))
+
+    def put_notification(
+        self, decision_id: str, notification: dict[str, Any]
+    ) -> None:
+        self._put(f"DECISION#{decision_id}", "NOTIFICATION", notification)
+
+    def wait_for_notification(
+        self, decision_id: str, *, timeout_seconds: float
+    ) -> dict[str, Any] | None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            notification = self.get_notification(decision_id)
+            if notification is not None:
+                return notification
+            time.sleep(0.05)
+        return None
 
     def get_decision(self, candidate_id: str) -> dict[str, Any] | None:
         return self._payload(self._get(f"CANDIDATE#{candidate_id}", "DECISION"))

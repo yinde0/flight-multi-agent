@@ -152,6 +152,75 @@ services:
     networks:
       - travel-internal
 
+  notification-mcp:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.notification_mcp:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8007"
+    expose:
+      - "8007"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - notification-internal
+
+  notification-action-service:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.notification_action_service:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8008"
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: eu-west-2
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MONITORING_TABLE_NAME: travel-monitoring-state
+      NATS_URL: nats://nats:4222
+      NOTIFICATION_MCP_URL: http://notification-mcp:8007/mcp
+      NO_PROXY: notification-mcp,dynamodb-local,nats,localhost,127.0.0.1
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+      eval-agent:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      notification-mcp:
+        condition: service_healthy
+    expose:
+      - "8008"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8008/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+      - notification-internal
+
   monitor-agent:
     build:
       context: .
@@ -177,6 +246,8 @@ services:
       dynamodb-local:
         condition: service_started
       eval-agent:
+        condition: service_healthy
+      notification-action-service:
         condition: service_healthy
       flight-status-mcp:
         condition: service_healthy
@@ -275,6 +346,8 @@ networks:
   document-egress:
   flight-egress:
   weather-egress:
+  notification-internal:
+    internal: true
 
 volumes:
   dynamodb-data:

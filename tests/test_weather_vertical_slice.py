@@ -34,6 +34,7 @@ class MemoryStore:
         self.candidates: dict[str, dict[str, Any]] = {}
         self.decisions: dict[str, dict[str, Any]] = {}
         self.confirmed: dict[str, dict[str, Any]] = {}
+        self.notifications: dict[str, dict[str, Any]] = {}
         self.bands: dict[str, int] = {}
 
     @staticmethod
@@ -54,6 +55,16 @@ class MemoryStore:
 
     def put_candidate(self, candidate):
         self.candidates[candidate["candidate_id"]] = copy.deepcopy(candidate)
+
+    def get_notification(self, decision_id):
+        return copy.deepcopy(self.notifications.get(decision_id))
+
+    def put_notification(self, decision_id, notification):
+        self.notifications[decision_id] = copy.deepcopy(notification)
+
+    def wait_for_notification(self, decision_id, *, timeout_seconds):
+        del timeout_seconds
+        return self.get_notification(decision_id)
 
     def get_decision(self, candidate_id):
         return copy.deepcopy(self.decisions.get(candidate_id))

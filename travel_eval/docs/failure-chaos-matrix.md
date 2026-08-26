@@ -17,10 +17,10 @@
 | F13 | Weather API unavailable | Continue flight monitoring with weather marked unavailable | No disruption inferred; last weather is not overwritten | Automated: vertical-04 poll 7 |
 | F14 | DynamoDB conditional write conflict | Re-read version and recompute diff | At most one accepted state transition | Planned integration test |
 | F15 | Event bus redelivers candidate | Eval processing is idempotent | One decision per candidate/version | Planned integration test |
-| F16 | Event bus redelivers confirmed event | Action service deduplicates | One user-visible notification | Planned integration test |
+| F16 | Event bus redelivers confirmed event | Action service deduplicates | One notification provider call and one stored receipt | Automated unit: notification idempotency |
 | F17 | Postgres commit succeeds but event publish fails | Transactional outbox retries publication | No lost trip activation | Planned integration test |
-| F18 | Notification MCP returns transient error | Retry with same idempotency key | No duplicate delivery | Planned integration test |
-| F19 | Notification MCP receives suppressed decision | Reject request | Unauthorized count remains zero | Planned security test |
+| F18 | Notification MCP returns transient error | Record failure without claiming delivery | `NOTIFICATION_MCP_FAILED`; no provider receipt | Automated unit: notification outage |
+| F19 | Notification MCP receives suppressed decision | Reject request | Contract validation fails before delivery | Automated security unit |
 | F20 | Eval service is unavailable | Candidate queues without action | No bypass to notification | Planned integration test |
 | F21 | Cache is empty after restart | Re-establish baseline before diffing | First observation produces no alert | Planned restart test |
 | F22 | Provider timestamps have clock skew | Order by accepted source version and bounds | No state regression | Planned integration test |
