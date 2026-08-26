@@ -1,0 +1,65 @@
+services:
+  document-agent:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.a2a_service:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+    environment:
+      CREWAI_DISABLE_TELEMETRY: "true"
+      CREWAI_TESTING: "true"
+      DOCUMENT_AGENT_PUBLIC_URL: http://document-agent:8001
+    expose:
+      - "8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+
+  travel-api:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.api:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      DOCUMENT_AGENT_URL: http://document-agent:8001
+    depends_on:
+      document-agent:
+        condition: service_healthy
+    ports:
+      - "8080:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - travel-internal
+      - travel-edge
+
+networks:
+  travel-internal:
+    internal: true
+  travel-edge:

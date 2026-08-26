@@ -1,8 +1,33 @@
 # Travel Disruption Evaluation Package
 
-This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. It deliberately contains no CrewAI agents, A2A services, MCP servers, provider clients, databases, or notification credentials yet.
+This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system and now includes its first executable vertical slice: PDF upload to a CrewAI document flow over A2A, packaged as two Docker containers.
 
 The package defines the contracts those components must satisfy and provides deterministic scenario replay before any application implementation exists.
+
+## First vertical slice
+
+The first application path is intentionally thin and testable:
+
+```text
+PDF upload -> Travel API -> A2A SendMessage -> Document Agent
+           <- canonical itinerary or explicit review request <-
+```
+
+- The API discovers the document agent using `/.well-known/agent-card.json`.
+- The PDF and metadata cross a real A2A 1.0 JSON-RPC boundary.
+- A CrewAI Flow extracts the PDF text layer and structures the itinerary.
+- Clean documents are compared exactly with checked-in golden JSON.
+- Image-only documents abstain safely; OCR is the next document slice.
+
+See [docs/vertical-slice-01.md](docs/vertical-slice-01.md) for its contract and test commands.
+
+Run the containerized slice and compare the actual output with the goldens:
+
+```powershell
+docker compose up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_document_test.py
+docker compose down
+```
 
 ## What is included
 
@@ -20,8 +45,9 @@ The package defines the contracts those components must satisfy and provides det
 From the repository root:
 
 ```powershell
-python -m travel_eval.runner
-python -m unittest discover -s tests -v
+uv run python -m travel_eval.runner
+uv sync --extra app
+uv run python -m unittest discover -s tests -v
 ```
 
 The CLI exits non-zero when an automated acceptance threshold fails. Use `--show-results` to inspect the full derived evidence:
@@ -65,4 +91,4 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-The later system can replace the replay adapters with CrewAI, A2A, MCP, an event bus, RDS, DynamoDB, and S3 without changing these contracts. The notification MCP tool must only be reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must never be interpreted as permission to purchase or cancel travel.
+Later vertical slices will add MCP flight/weather tools, the event bus, stateful monitoring, evaluation, and post-approval notification. RDS, DynamoDB, and S3 adapters can replace local fixture adapters without changing the canonical contracts. The notification MCP tool must only be reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must never be interpreted as permission to purchase or cancel travel.
