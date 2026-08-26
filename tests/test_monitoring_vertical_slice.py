@@ -36,6 +36,7 @@ MONITORING_FIXTURES = ROOT / "travel_eval" / "fixtures" / "monitoring"
 class InMemoryMonitoringStore:
     def __init__(self) -> None:
         self.last_observations: dict[str, dict[str, Any]] = {}
+        self.last_weather: dict[str, dict[str, Any]] = {}
         self.candidates: dict[str, dict[str, Any]] = {}
         self.decisions: dict[str, dict[str, Any]] = {}
         self.confirmed_events: dict[str, dict[str, Any]] = {}
@@ -58,6 +59,16 @@ class InMemoryMonitoringStore:
         self.last_observations[self._leg_key(trip_id, leg_id)] = copy.deepcopy(
             observation
         )
+
+    def get_last_weather(
+        self, trip_id: str, leg_id: str
+    ) -> dict[str, Any] | None:
+        return copy.deepcopy(self.last_weather.get(self._leg_key(trip_id, leg_id)))
+
+    def put_last_weather(
+        self, trip_id: str, leg_id: str, weather: dict[str, Any]
+    ) -> None:
+        self.last_weather[self._leg_key(trip_id, leg_id)] = copy.deepcopy(weather)
 
     def put_candidate(self, candidate: dict[str, Any]) -> None:
         self.candidates[candidate["candidate_id"]] = copy.deepcopy(candidate)
@@ -263,6 +274,9 @@ class AviationStackAdapterTests(unittest.TestCase):
             nonlocal captured_url
             captured_url = str(request.url)
             self.assertEqual(request.url.params["access_key"], "secret-test-key")
+            self.assertEqual(request.url.params["flight_iata"], "NB204")
+            self.assertEqual(request.url.params["limit"], "100")
+            self.assertNotIn("flight_date", request.url.params)
             return httpx.Response(
                 200,
                 json={
@@ -307,6 +321,58 @@ class AviationStackAdapterTests(unittest.TestCase):
         self.assertEqual(observation.departure.estimated_at, "2026-09-15T08:50:00Z")
         self.assertNotIn("secret-test-key", json.dumps(dumped))
         self.assertIn("access_key=secret-test-key", captured_url)
+
+    def test_discovery_uses_unfiltered_feed_and_selects_a_real_record(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(request.url.params["access_key"], "secret-test-key")
+            self.assertEqual(request.url.params["limit"], "10")
+            self.assertEqual(request.url.params["offset"], "0")
+            self.assertNotIn("flight_iata", request.url.params)
+            self.assertNotIn("flight_date", request.url.params)
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"flight_date": "2026-09-15", "flight": {"iata": None}},
+                        {
+                            "flight_date": "2026-09-15",
+                            "flight_status": "scheduled",
+                            "flight": {"iata": "NB204"},
+                            "departure": {
+                                "iata": "LHR",
+                                "scheduled": "2026-09-15T08:20:00+00:00",
+                                "estimated": "2026-09-15T08:20:00+00:00",
+                                "actual": None,
+                                "terminal": "5",
+                                "gate": "A10",
+                            },
+                            "arrival": {
+                                "iata": "AMS",
+                                "scheduled": "2026-09-15T09:35:00+00:00",
+                                "estimated": "2026-09-15T09:35:00+00:00",
+                                "actual": None,
+                                "terminal": "1",
+                                "gate": None,
+                            },
+                            "live": None,
+                        },
+                    ]
+                },
+            )
+
+        provider = AviationStackFlightStatusProvider(
+            api_key="secret-test-key",
+            base_url="https://aviation.test/v1",
+            transport=httpx.MockTransport(handler),
+        )
+        sample = provider.discover_live_flight_sample(limit=10)
+
+        self.assertEqual(sample.flight_iata, "NB204")
+        self.assertEqual(sample.flight_date, "2026-09-15")
+        self.assertEqual(sample.origin, "LHR")
+        self.assertEqual(sample.destination, "AMS")
+        self.assertEqual(sample.observation.status, "scheduled")
+        self.assertNotIn("secret-test-key", sample.model_dump_json())
 
     def test_missing_api_key_fails_before_network(self):
         provider = AviationStackFlightStatusProvider(

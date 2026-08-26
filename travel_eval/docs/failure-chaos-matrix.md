@@ -14,7 +14,7 @@
 | F10 | Ambiguous flight number in raster PDF | Abstain and request review | No guessed flight identifier | Fixture: `redacted_ambiguous_scan.pdf` |
 | F11 | Flight-status MCP timeout | Preserve last accepted state; retry with backoff | No synthetic disruption | Planned integration test |
 | F12 | Flight API returns HTTP 429 | Respect retry budget and polling priority | No tight retry loop | Planned integration test |
-| F13 | Weather API unavailable | Continue flight monitoring with weather marked unknown | No disruption inferred | Planned integration test |
+| F13 | Weather API unavailable | Continue flight monitoring with weather marked unavailable | No disruption inferred; last weather is not overwritten | Automated: vertical-04 poll 7 |
 | F14 | DynamoDB conditional write conflict | Re-read version and recompute diff | At most one accepted state transition | Planned integration test |
 | F15 | Event bus redelivers candidate | Eval processing is idempotent | One decision per candidate/version | Planned integration test |
 | F16 | Event bus redelivers confirmed event | Action service deduplicates | One user-visible notification | Planned integration test |
@@ -28,5 +28,8 @@
 | F24 | Search provider returns impossible connection | Filter alternative | No infeasible itinerary presented | Planned search test |
 | F25 | Search result fare expires | Mark stale; do not claim availability | No booking implication | Planned search test |
 | F26 | Secret or PII appears in logs | Redaction filter removes it | Security scan passes | Planned observability test |
+| F27 | Light rain with unchanged flight state | Retain and suppress weather-only candidate | `MINOR_WEATHER_ONLY` | Automated: vertical-04 poll 2 |
+| F28 | Severe forecast repeats unchanged | Do not publish another candidate | Candidate count remains unchanged | Automated: vertical-04 poll 5 |
+| F29 | Severe weather and 45-minute delay coincide | Keep flight-impact verdict and attach corroboration | One `NOTIFY` with `SEVERE_WEATHER_CORROBORATED` | Automated: vertical-04 poll 4 |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
-  "policy_version": "1.0.0",
+  "policy_version": "1.1.0",
   "effective_from": "2026-08-25T00:00:00Z",
-  "description": "Initial deterministic notification and rebooking-search policy.",
+  "description": "Deterministic flight-impact policy with advisory weather corroboration.",
   "thresholds": {
     "delay_minutes": {
       "notify": 30,
@@ -50,12 +50,30 @@
     },
     {
       "rule_id": "P007",
-      "when": "category == WEATHER_RISK and no operational impact",
+      "when": "category == WEATHER_RISK and weather_risk_level in [high, severe]",
       "verdict": "SUPPRESS",
       "reason_code": "WEATHER_UNCORROBORATED"
     },
     {
       "rule_id": "P008",
+      "when": "category == WEATHER_RISK and weather_risk_level in [low, moderate]",
+      "verdict": "SUPPRESS",
+      "reason_code": "MINOR_WEATHER_ONLY"
+    },
+    {
+      "rule_id": "P009",
+      "when": "category == WEATHER_RISK and weather_risk_level == none",
+      "verdict": "SUPPRESS",
+      "reason_code": "WEATHER_CLEARED"
+    },
+    {
+      "rule_id": "P010",
+      "when": "verdict != SUPPRESS and corroborated_by_weather == true",
+      "verdict_effect": "UNCHANGED",
+      "reason_code": "SEVERE_WEATHER_CORROBORATED"
+    },
+    {
+      "rule_id": "P011",
       "when": "severity_band <= highest_notified_band for episode",
       "verdict": "SUPPRESS",
       "reason_code": "DUPLICATE_SEVERITY_BAND"

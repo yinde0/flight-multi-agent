@@ -5,8 +5,15 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from flight_agent.flight_status import provider_from_environment
-from flight_agent.monitoring_contracts import ProviderFlightObservation
+from flight_agent.flight_status import (
+    AviationStackFlightStatusProvider,
+    FlightStatusProviderError,
+    provider_from_environment,
+)
+from flight_agent.monitoring_contracts import (
+    LiveFlightSample,
+    ProviderFlightObservation,
+)
 
 
 provider = provider_from_environment()
@@ -50,6 +57,22 @@ def get_flight_status(
         replay_key=replay_key,
     )
     return observation
+
+
+@mcp.tool(
+    name="discover_live_flight_sample",
+    description=(
+        "Select one usable flight from AviationStack's unfiltered real-time "
+        "feed for credential-safe integration testing."
+    ),
+    structured_output=True,
+)
+def discover_live_flight_sample(limit: int = 10) -> LiveFlightSample:
+    if not isinstance(provider, AviationStackFlightStatusProvider):
+        raise FlightStatusProviderError(
+            "Live discovery is available only with the AviationStack provider"
+        )
+    return provider.discover_live_flight_sample(limit=limit)
 
 
 @mcp.custom_route("/health/live", methods=["GET"])

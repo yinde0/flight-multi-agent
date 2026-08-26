@@ -71,10 +71,19 @@ class SuppressionPolicy:
             reason_codes = ["TERMINAL_ONLY_CHANGE"]
         elif category == "WEATHER_RISK":
             verdict = "SUPPRESS"
-            reason_codes = ["WEATHER_UNCORROBORATED"]
+            weather_risk = candidate.get("weather_risk_level", "unknown")
+            if weather_risk == "none":
+                reason_codes = ["WEATHER_CLEARED"]
+            elif weather_risk in {"low", "moderate"}:
+                reason_codes = ["MINOR_WEATHER_ONLY"]
+            else:
+                reason_codes = ["WEATHER_UNCORROBORATED"]
         else:
             verdict = "SUPPRESS"
             reason_codes = ["NON_ACTIONABLE_STATUS_CHANGE"]
+
+        if verdict != "SUPPRESS" and candidate.get("corroborated_by_weather"):
+            reason_codes.append("SEVERE_WEATHER_CORROBORATED")
 
         episode_key = f"{candidate['trip_id']}:{candidate['leg_id']}:{category}"
         band = self.severity_band(candidate)

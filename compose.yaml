@@ -63,6 +63,7 @@ services:
       AviationStack_API_KEY: ${AviationStack_API_KEY:-}
       AVIATIONSTACK_BASE_URL: ${AVIATIONSTACK_BASE_URL:-https://api.aviationstack.com/v1}
       AVIATIONSTACK_TIMEOUT_SECONDS: ${AVIATIONSTACK_TIMEOUT_SECONDS:-30}
+      AVIATIONSTACK_INCLUDE_FLIGHT_DATE_FILTER: ${AVIATIONSTACK_INCLUDE_FLIGHT_DATE_FILTER:-false}
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json
     expose:
       - "8003"
@@ -79,6 +80,39 @@ services:
     networks:
       - travel-internal
       - flight-egress
+
+  weather-mcp:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.weather_mcp:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8006"
+    environment:
+      WEATHER_PROVIDER: ${WEATHER_PROVIDER:-openweathermap}
+      OpenWeatherMap_API_KEY: ${OpenWeatherMap_API_KEY:-}
+      OPENWEATHER_BASE_URL: ${OPENWEATHER_BASE_URL:-https://api.openweathermap.org/data/2.5}
+      OPENWEATHER_TIMEOUT_SECONDS: ${OPENWEATHER_TIMEOUT_SECONDS:-30}
+      AIRPORT_COORDINATE_FIXTURE: /app/travel_eval/fixtures/airports.json
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_weather_timeline.json
+    expose:
+      - "8006"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+      - weather-egress
 
   eval-agent:
     build:
@@ -135,15 +169,18 @@ services:
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
       FLIGHT_STATUS_MCP_URL: http://flight-status-mcp:8003/mcp
+      WEATHER_MCP_URL: http://weather-mcp:8006/mcp
       MONITOR_AGENT_PUBLIC_URL: http://monitor-agent:8004
       NATS_URL: nats://nats:4222
-      NO_PROXY: flight-status-mcp,dynamodb-local,nats,monitor-agent,localhost,127.0.0.1
+      NO_PROXY: flight-status-mcp,weather-mcp,dynamodb-local,nats,monitor-agent,localhost,127.0.0.1
     depends_on:
       dynamodb-local:
         condition: service_started
       eval-agent:
         condition: service_healthy
       flight-status-mcp:
+        condition: service_healthy
+      weather-mcp:
         condition: service_healthy
       nats:
         condition: service_healthy
@@ -237,6 +274,7 @@ networks:
   travel-edge:
   document-egress:
   flight-egress:
+  weather-egress:
 
 volumes:
   dynamodb-data:

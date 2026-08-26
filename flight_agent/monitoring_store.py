@@ -23,6 +23,14 @@ class MonitoringStore(Protocol):
         self, trip_id: str, leg_id: str, observation: dict[str, Any]
     ) -> None: ...
 
+    def get_last_weather(
+        self, trip_id: str, leg_id: str
+    ) -> dict[str, Any] | None: ...
+
+    def put_last_weather(
+        self, trip_id: str, leg_id: str, weather: dict[str, Any]
+    ) -> None: ...
+
     def put_candidate(self, candidate: dict[str, Any]) -> None: ...
 
     def get_decision(self, candidate_id: str) -> dict[str, Any] | None: ...
@@ -152,6 +160,22 @@ class DynamoMonitoringStateStore:
             self._leg_partition(trip_id, leg_id),
             "LAST_OBSERVATION",
             observation,
+        )
+
+    def get_last_weather(
+        self, trip_id: str, leg_id: str
+    ) -> dict[str, Any] | None:
+        return self._payload(
+            self._get(self._leg_partition(trip_id, leg_id), "LAST_WEATHER")
+        )
+
+    def put_last_weather(
+        self, trip_id: str, leg_id: str, weather: dict[str, Any]
+    ) -> None:
+        self._put(
+            self._leg_partition(trip_id, leg_id),
+            "LAST_WEATHER",
+            weather,
         )
 
     def put_candidate(self, candidate: dict[str, Any]) -> None:

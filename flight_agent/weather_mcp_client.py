@@ -9,52 +9,43 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 
-from flight_agent.monitoring_contracts import (
-    LiveFlightSample,
-    ProviderFlightObservation,
-)
+from flight_agent.monitoring_contracts import ProviderWeatherObservation
 
 
-class FlightStatusGateway(Protocol):
-    def get_flight_status(
+class WeatherGateway(Protocol):
+    def get_airport_weather(
         self,
         *,
-        flight_iata: str,
-        flight_date: str,
+        airport: str,
+        target_at: str,
         replay_key: str | None = None,
-    ) -> ProviderFlightObservation: ...
+    ) -> ProviderWeatherObservation: ...
 
 
-class StreamableHttpFlightStatusMcpClient:
-    """MCP client used by the Monitoring Agent inside its CrewAI worker thread."""
+class StreamableHttpWeatherMcpClient:
+    """Synchronous MCP gateway used inside the CrewAI worker thread."""
 
     def __init__(self, url: str) -> None:
         self._url = url
 
-    def get_flight_status(
+    def get_airport_weather(
         self,
         *,
-        flight_iata: str,
-        flight_date: str,
+        airport: str,
+        target_at: str,
         replay_key: str | None = None,
-    ) -> ProviderFlightObservation:
+    ) -> ProviderWeatherObservation:
         payload = asyncio.run(
             self._call_tool(
-                "get_flight_status",
+                "get_airport_weather",
                 {
-                    "flight_iata": flight_iata,
-                    "flight_date": flight_date,
+                    "airport": airport,
+                    "target_at": target_at,
                     "replay_key": replay_key,
                 },
             )
         )
-        return ProviderFlightObservation.model_validate(payload)
-
-    def discover_live_flight_sample(self, *, limit: int = 10) -> LiveFlightSample:
-        payload = asyncio.run(
-            self._call_tool("discover_live_flight_sample", {"limit": limit})
-        )
-        return LiveFlightSample.model_validate(payload)
+        return ProviderWeatherObservation.model_validate(payload)
 
     async def _call_tool(self, name: str, arguments: dict) -> dict:
         async with streamable_http_client(self._url) as (
@@ -65,9 +56,8 @@ class StreamableHttpFlightStatusMcpClient:
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
                 result = await session.call_tool(name, arguments=arguments)
-
         if result.isError:
-            raise RuntimeError("Flight-status MCP tool returned an error")
+            raise RuntimeError("Weather MCP tool returned an error")
         payload = result.structuredContent
         if not isinstance(payload, dict):
             for part in result.content:
@@ -80,5 +70,5 @@ class StreamableHttpFlightStatusMcpClient:
                         payload = candidate
                         break
         if not isinstance(payload, dict):
-            raise RuntimeError("Flight-status MCP tool returned no structured output")
+            raise RuntimeError("Weather MCP tool returned no structured output")
         return payload

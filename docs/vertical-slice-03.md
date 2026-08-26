@@ -80,17 +80,30 @@ stack without the test overlay:
 ```powershell
 docker compose down
 docker compose up --build -d --wait
-.\.venv\Scripts\python.exe tools\smoke_live_flight_status.py BA117 2026-08-26
+.\.venv\Scripts\python.exe tools\smoke_live_flight_status.py
 docker compose down
 ```
 
-Choose a flight and date available to your AviationStack subscription. The API
-key is sent only from the Flight Status MCP container to AviationStack; it is not
-included in the normalized observation, event, or runner output.
+The runner first asks the internal MCP server for an unfiltered real-time sample,
+selects an actual returned flight/date, and then sends that pair through the
+normal Travel API, A2A, MCP, and DynamoDB path. This avoids pretending that a
+synthetic future flight exists. You may still provide a known pair explicitly:
 
-`OpenWeatherMap_API_KEY` is documented in `.env.example` but is deliberately not
-read in this slice. Weather correlation is the next independent vertical build,
-so weather cannot accidentally influence the current flight-only golden result.
+```powershell
+.\.venv\Scripts\python.exe tools\smoke_live_flight_status.py BA117 2026-08-26
+```
+
+By default, `flight_date` is validated locally against AviationStack's returned
+record but is not sent as a provider filter. Set
+`AVIATIONSTACK_INCLUDE_FLIGHT_DATE_FILTER=true` only for a subscription and use
+case that supports date-filtered historical or future access. The API key stays
+inside the Flight Status MCP container and is never included in the normalized
+observation, event, or runner output.
+
+The slice-03 replay overlay now supplies an always-clear weather timeline so this
+older flight-only golden remains a regression test after weather corroboration was
+added in slice 04. See `vertical-slice-04.md` for the independent Weather MCP and
+live `OpenWeatherMap_API_KEY` path.
 
 ## Fail-closed behavior
 

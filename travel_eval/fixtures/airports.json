@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Deterministic airport coordinates used for weather lookup. Coordinates are approximate aerodrome reference points.",
+  "airports": {
+    "AMS": {"latitude": 52.3105, "longitude": 4.7683},
+    "CDG": {"latitude": 49.0097, "longitude": 2.5479},
+    "DPS": {"latitude": -8.7482, "longitude": 115.1672},
+    "DXB": {"latitude": 25.2532, "longitude": 55.3657},
+    "FRA": {"latitude": 50.0379, "longitude": 8.5622},
+    "ICN": {"latitude": 37.4602, "longitude": 126.4407},
+    "JFK": {"latitude": 40.6413, "longitude": -73.7781},
+    "LAX": {"latitude": 33.9416, "longitude": -118.4085},
+    "LGW": {"latitude": 51.1537, "longitude": -0.1821},
+    "LHR": {"latitude": 51.4700, "longitude": -0.4543},
+    "MAD": {"latitude": 40.4983, "longitude": -3.5676},
+    "ORD": {"latitude": 41.9742, "longitude": -87.9073},
+    "SIN": {"latitude": 1.3644, "longitude": 103.9915},
+    "SYD": {"latitude": -33.9399, "longitude": 151.1753}
+  }
+}

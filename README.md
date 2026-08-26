@@ -42,11 +42,12 @@ For a real Mistral call, copy `.env.example` to `.env`, set `MISTRAL_API_KEY`, a
 
 ## Stateful monitoring vertical slice
 
-The next complete path uses every agreed integration boundary:
+The monitoring path now combines independently sourced flight and weather evidence:
 
 ```text
 Travel API -> A2A Monitoring Agent -> MCP Flight Status
-                                     -> DynamoDB last-known state
+                                  |  -> MCP Airport Weather
+                                     -> DynamoDB last-known flight + weather state
                                      -> NATS disruption_candidate -> Eval Agent
                                                                    -> disruption_confirmed
 ```
@@ -65,6 +66,19 @@ gate-only change, suppress a 20-minute delay, confirm a 45-minute delay exactly
 once, and do not re-alert when that status remains unchanged. See
 [docs/vertical-slice-03.md](docs/vertical-slice-03.md) for the architecture,
 golden table, live AviationStack command, and failure rules.
+
+Run the seven-poll weather-corroboration timeline with a Monitoring Agent restart:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.weather-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_weather_test.py --restart-monitor
+docker compose -f compose.yaml -f compose.test.yaml -f compose.weather-test.yaml down
+```
+
+It suppresses light rain, severe weather without flight impact, repeated state,
+and a weather-cleared update; it confirms one 45-minute delay with severe weather
+as corroborating evidence and continues flight-only when weather is unavailable.
+See [docs/vertical-slice-04.md](docs/vertical-slice-04.md).
 
 ## What is included
 
@@ -129,10 +143,10 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-The flight-status MCP tool, NATS event path, DynamoDB state adapter, Monitoring
-Agent, and Eval Agent now exist. Later vertical slices will add independently
-corroborated OpenWeatherMap observations, the post-approval notification MCP, and
-rebooking search. RDS and S3 adapters can replace fixture-backed itinerary inputs
+The flight-status and weather MCP tools, NATS event path, DynamoDB state adapter,
+Monitoring Agent, and Eval Agent now exist. Later vertical slices will add the
+post-approval notification MCP and rebooking search. RDS and S3 adapters can
+replace fixture-backed itinerary inputs
 without changing the canonical contracts. The notification MCP must only be
 reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must
 never be interpreted as permission to purchase or cancel travel.

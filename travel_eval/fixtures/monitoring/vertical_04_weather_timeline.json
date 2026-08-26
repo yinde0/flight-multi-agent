@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "airport": "LHR",
+  "description": "Clear, light rain, severe thunderstorm, unchanged severe weather, clear, then outage.",
+  "observations": [
+    {
+      "schema_version": "1.0.0", "observation_id": "weather-v4-001", "observed_at": "2026-09-15T06:00:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 800, "condition": "Clear", "description": "clear sky", "risk_level": "none", "alerts": [], "precipitation_probability": 0.0, "wind_speed_mps": 3.0, "visibility_metres": 10000, "confidence": 0.95
+    },
+    {
+      "schema_version": "1.0.0", "observation_id": "weather-v4-002", "observed_at": "2026-09-15T06:05:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 500, "condition": "Rain", "description": "light rain", "risk_level": "low", "alerts": ["LIGHT_PRECIPITATION"], "precipitation_probability": 0.45, "wind_speed_mps": 4.0, "visibility_metres": 9000, "confidence": 0.95
+    },
+    {
+      "schema_version": "1.0.0", "observation_id": "weather-v4-003", "observed_at": "2026-09-15T06:10:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 202, "condition": "Thunderstorm", "description": "thunderstorm with heavy rain", "risk_level": "severe", "alerts": ["THUNDERSTORM"], "precipitation_probability": 0.9, "wind_speed_mps": 12.0, "visibility_metres": 3000, "confidence": 0.95
+    },
+    {
+      "schema_version": "1.0.0", "observation_id": "weather-v4-004", "observed_at": "2026-09-15T06:15:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 202, "condition": "Thunderstorm", "description": "thunderstorm with heavy rain", "risk_level": "severe", "alerts": ["THUNDERSTORM"], "precipitation_probability": 0.9, "wind_speed_mps": 12.0, "visibility_metres": 3000, "confidence": 0.95
+    },
+    {
+      "schema_version": "1.0.0", "observation_id": "weather-v4-005", "observed_at": "2026-09-15T06:20:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 202, "condition": "Thunderstorm", "description": "thunderstorm with heavy rain", "risk_level": "severe", "alerts": ["THUNDERSTORM"], "precipitation_probability": 0.9, "wind_speed_mps": 12.0, "visibility_metres": 3000, "confidence": 0.95
+    },
+    {
+      "schema_version": "1.0.0", "observation_id": "weather-v4-006", "observed_at": "2026-09-15T06:25:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 800, "condition": "Clear", "description": "clear sky", "risk_level": "none", "alerts": [], "precipitation_probability": 0.0, "wind_speed_mps": 3.0, "visibility_metres": 10000, "confidence": 0.95
+    },
+    {"error": "simulated provider outage"}
+  ]
+}

@@ -25,7 +25,9 @@
     "delay_minutes": {"type": "integer", "minimum": 0},
     "connection_buffer_minutes": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
     "minimum_connection_minutes": {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
-    "weather_risk_level": {"enum": ["none", "low", "moderate", "high", "severe"]},
+    "weather_risk_level": {"enum": ["unknown", "none", "low", "moderate", "high", "severe"]},
+    "weather_evidence_status": {"enum": ["available", "unavailable"]},
+    "corroborated_by_weather": {"type": "boolean"},
     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     "score": {"type": "number", "minimum": 0, "maximum": 1},
     "evidence_observation_ids": {"type": "array", "minItems": 2, "items": {"type": "string"}}

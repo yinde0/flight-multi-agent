@@ -16,6 +16,8 @@ class FlightMovement(BaseModel):
 
 
 class NeutralWeather(BaseModel):
+    """Legacy weather shape retained for slice-03 replay compatibility."""
+
     model_config = ConfigDict(extra="forbid")
 
     airport: str = Field(pattern=r"^[A-Z]{3}$")
@@ -39,9 +41,49 @@ class ProviderFlightObservation(BaseModel):
     ]
     departure: FlightMovement
     arrival: FlightMovement
-    weather: NeutralWeather
+    departure_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    destination_airport: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    weather: NeutralWeather | None = None
     data_freshness_seconds: int = Field(ge=0)
     confidence: float = Field(ge=0, le=1)
+
+
+class ProviderWeatherObservation(BaseModel):
+    """Normalized forecast returned by the dedicated weather MCP tool."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    observation_id: str = Field(min_length=1)
+    observed_at: str
+    source: str = Field(min_length=1)
+    airport: str = Field(pattern=r"^[A-Z]{3}$")
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    target_at: str
+    forecast_at: str
+    condition_code: int = Field(ge=0)
+    condition: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    risk_level: Literal["none", "low", "moderate", "high", "severe"]
+    alerts: list[str] = Field(default_factory=list)
+    precipitation_probability: float = Field(ge=0, le=1)
+    wind_speed_mps: float = Field(ge=0)
+    visibility_metres: int | None = Field(default=None, ge=0)
+    confidence: float = Field(ge=0, le=1)
+
+
+class LiveFlightSample(BaseModel):
+    """A real flight selected from AviationStack's unfiltered live feed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    flight_iata: str = Field(pattern=r"^[A-Z0-9]{2,3}[0-9]{1,4}$")
+    flight_date: str = Field(pattern=r"^20[0-9]{2}-[0-9]{2}-[0-9]{2}$")
+    origin: str = Field(pattern=r"^[A-Z]{3}$")
+    destination: str = Field(pattern=r"^[A-Z]{3}$")
+    observation: ProviderFlightObservation
 
 
 class MonitoringPollRequest(BaseModel):

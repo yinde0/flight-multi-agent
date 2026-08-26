@@ -39,3 +39,9 @@ services:
       FLIGHT_STATUS_PROVIDER: replay
       AviationStack_API_KEY: local-unused
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json
+
+  weather-mcp:
+    environment:
+      WEATHER_PROVIDER: replay
+      OpenWeatherMap_API_KEY: local-unused
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_weather_timeline.json

@@ -12,7 +12,12 @@ from typing import Any, Protocol
 
 import httpx
 
-from flight_agent.monitoring_contracts import ProviderFlightObservation
+from pydantic import ValidationError
+
+from flight_agent.monitoring_contracts import (
+    LiveFlightSample,
+    ProviderFlightObservation,
+)
 
 
 DEFAULT_AVIATIONSTACK_BASE_URL = "https://api.aviationstack.com/v1"
@@ -105,25 +110,30 @@ class AviationStackFlightStatusProvider:
         api_key: str,
         base_url: str = DEFAULT_AVIATIONSTACK_BASE_URL,
         timeout_seconds: float = 30.0,
+        include_flight_date_filter: bool = False,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._api_key = api_key.strip()
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._include_flight_date_filter = include_flight_date_filter
         self._transport = transport
 
-    def get_flight_status(
-        self,
-        *,
-        flight_iata: str,
-        flight_date: str,
-        replay_key: str | None = None,
-    ) -> ProviderFlightObservation:
-        del replay_key
+    @staticmethod
+    def _safe_provider_code(value: Any) -> str:
+        raw_code = str(value or "provider_error")
+        return "".join(
+            character
+            for character in raw_code
+            if character.isalnum() or character in {"_", "-"}
+        )[:80] or "provider_error"
+
+    def _get_records(self, parameters: dict[str, Any]) -> list[dict[str, Any]]:
         if not self._api_key:
             raise FlightStatusProviderError(
                 "AviationStack_API_KEY is required for the live provider"
             )
+        request_parameters = {"access_key": self._api_key, **parameters}
         try:
             with httpx.Client(
                 timeout=self._timeout_seconds,
@@ -131,12 +141,7 @@ class AviationStackFlightStatusProvider:
             ) as client:
                 response = client.get(
                     f"{self._base_url}/flights",
-                    params={
-                        "access_key": self._api_key,
-                        "flight_iata": flight_iata,
-                        "flight_date": flight_date,
-                        "limit": 10,
-                    },
+                    params=request_parameters,
                 )
         except httpx.HTTPError:
             # httpx exceptions may embed the full query string, including the
@@ -150,24 +155,39 @@ class AviationStackFlightStatusProvider:
         if response.is_error:
             provider_code = "provider_error"
             if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-                raw_code = str(payload["error"].get("code", provider_code))
-                provider_code = "".join(
-                    character
-                    for character in raw_code
-                    if character.isalnum() or character in {"_", "-"}
-                )[:80] or provider_code
+                provider_code = self._safe_provider_code(
+                    payload["error"].get("code")
+                )
             raise FlightStatusProviderError(
                 f"AviationStack HTTP {response.status_code}: {provider_code}"
             ) from None
-
         if not isinstance(payload, dict):
             raise FlightStatusProviderError("AviationStack returned invalid JSON")
         if isinstance(payload.get("error"), dict):
-            code = payload["error"].get("code", "provider_error")
-            raise FlightStatusProviderError(f"AviationStack error: {code}")
+            provider_code = self._safe_provider_code(payload["error"].get("code"))
+            raise FlightStatusProviderError(
+                f"AviationStack error: {provider_code}"
+            ) from None
         records = payload.get("data")
         if not isinstance(records, list) or not records:
-            raise FlightStatusProviderError("AviationStack returned no matching flight")
+            raise FlightStatusProviderError("AviationStack returned no flights")
+        return [item for item in records if isinstance(item, dict)]
+
+    def get_flight_status(
+        self,
+        *,
+        flight_iata: str,
+        flight_date: str,
+        replay_key: str | None = None,
+    ) -> ProviderFlightObservation:
+        del replay_key
+        parameters: dict[str, Any] = {
+            "flight_iata": flight_iata,
+            "limit": 100,
+        }
+        if self._include_flight_date_filter:
+            parameters["flight_date"] = flight_date
+        records = self._get_records(parameters)
 
         selected = next(
             (
@@ -186,6 +206,38 @@ class AviationStackFlightStatusProvider:
             )
         return self._normalize(selected, flight_iata)
 
+    def discover_live_flight_sample(self, *, limit: int = 10) -> LiveFlightSample:
+        """Select a usable record from the unrestricted real-time feed."""
+        if not 1 <= limit <= 100:
+            raise FlightStatusProviderError("Discovery limit must be between 1 and 100")
+        records = self._get_records({"limit": limit, "offset": 0})
+        for record in records:
+            flight = record.get("flight") or {}
+            departure = record.get("departure") or {}
+            arrival = record.get("arrival") or {}
+            if not all(
+                isinstance(item, dict) for item in (flight, departure, arrival)
+            ):
+                continue
+            flight_iata = str(flight.get("iata") or "").strip().upper()
+            flight_date = str(record.get("flight_date") or "").strip()
+            origin = str(departure.get("iata") or "").strip().upper()
+            destination = str(arrival.get("iata") or "").strip().upper()
+            try:
+                observation = self._normalize(record, flight_iata)
+                return LiveFlightSample(
+                    flight_iata=flight_iata,
+                    flight_date=flight_date,
+                    origin=origin,
+                    destination=destination,
+                    observation=observation,
+                )
+            except (FlightStatusProviderError, ValidationError, ValueError):
+                continue
+        raise FlightStatusProviderError(
+            "AviationStack live feed contained no usable flight sample"
+        )
+
     @staticmethod
     def _normalize(
         record: dict[str, Any], flight_iata: str
@@ -198,10 +250,13 @@ class AviationStackFlightStatusProvider:
         departure_scheduled = _optional_timestamp(departure.get("scheduled"))
         arrival_scheduled = _optional_timestamp(arrival.get("scheduled"))
         departure_airport = str(departure.get("iata") or "").upper()
+        arrival_airport = str(arrival.get("iata") or "").upper()
         if not departure_scheduled or not arrival_scheduled:
             raise FlightStatusProviderError("AviationStack scheduled times are missing")
         if len(departure_airport) != 3:
             raise FlightStatusProviderError("AviationStack departure IATA is missing")
+        if len(arrival_airport) != 3:
+            raise FlightStatusProviderError("AviationStack arrival IATA is missing")
 
         now = _now_utc()
         live = record.get("live") or {}
@@ -241,12 +296,8 @@ class AviationStackFlightStatusProvider:
                 "terminal": _optional_string(arrival.get("terminal")),
                 "gate": _optional_string(arrival.get("gate")),
             },
-            weather={
-                "airport": departure_airport,
-                "valid_at": departure_scheduled,
-                "risk_level": "none",
-                "alerts": [],
-            },
+            departure_airport=departure_airport,
+            destination_airport=arrival_airport,
             data_freshness_seconds=max(0, int((now - source_time).total_seconds())),
             confidence=0.95 if updated else 0.85,
         )
@@ -269,4 +320,8 @@ def provider_from_environment() -> FlightStatusProvider:
             "AVIATIONSTACK_BASE_URL", DEFAULT_AVIATIONSTACK_BASE_URL
         ),
         timeout_seconds=float(os.getenv("AVIATIONSTACK_TIMEOUT_SECONDS", "30")),
+        include_flight_date_filter=os.getenv(
+            "AVIATIONSTACK_INCLUDE_FLIGHT_DATE_FILTER", "false"
+        ).lower()
+        in {"1", "true", "yes"},
     )

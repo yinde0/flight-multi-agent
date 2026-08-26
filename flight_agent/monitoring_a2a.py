@@ -38,6 +38,8 @@ from flight_agent.monitoring_store import (
     DynamoMonitoringStateStore,
     MonitoringStore,
 )
+from flight_agent.weather import NeutralWeatherGateway
+from flight_agent.weather_mcp_client import StreamableHttpWeatherMcpClient, WeatherGateway
 
 
 def _request_data(context: RequestContext) -> MonitoringPollRequest:
@@ -56,10 +58,12 @@ class FlightMonitoringAgentExecutor(AgentExecutor):
         self,
         *,
         flight_status: FlightStatusGateway,
+        weather: WeatherGateway,
         store: MonitoringStore,
         publisher: CandidatePublisher,
     ) -> None:
         self._flight_status = flight_status
+        self._weather = weather
         self._store = store
         self._publisher = publisher
 
@@ -77,6 +81,7 @@ class FlightMonitoringAgentExecutor(AgentExecutor):
             run_monitoring_flow,
             request,
             flight_status=self._flight_status,
+            weather=self._weather,
             store=self._store,
             publisher=self._publisher,
         )
@@ -102,8 +107,8 @@ def build_monitoring_agent_card(public_url: str) -> AgentCard:
     return AgentCard(
         name="Travel Flight Monitoring Agent",
         description=(
-            "Polls flight status through MCP, diffs durable state, and publishes "
-            "disruption candidates for independent evaluation."
+            "Polls flight status and airport weather through separate MCP services, "
+            "diffs durable state, and publishes candidates for independent evaluation."
         ),
         version="0.1.0",
         capabilities=AgentCapabilities(
@@ -115,10 +120,10 @@ def build_monitoring_agent_card(public_url: str) -> AgentCard:
         skills=[
             AgentSkill(
                 id="poll_flight_status",
-                name="Poll flight status",
+                name="Poll flight and weather evidence",
                 description=(
-                    "Read one flight status, compare it with the durable previous "
-                    "state, and publish a candidate only when fields changed."
+                    "Read flight status and airport weather, compare both with durable "
+                    "previous state, and publish a candidate only when evidence changed."
                 ),
                 tags=["travel", "flight-status", "monitoring", "mcp"],
                 examples=["Poll NB204 for 2026-09-15"],
@@ -140,12 +145,20 @@ def create_monitoring_agent_app(
     public_url: str | None = None,
     *,
     flight_status: FlightStatusGateway | None = None,
+    weather: WeatherGateway | None = None,
     store: MonitoringStore | None = None,
     publisher: CandidatePublisher | None = None,
 ) -> FastAPI:
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
     resolved_flight_status = flight_status or StreamableHttpFlightStatusMcpClient(
         os.getenv("FLIGHT_STATUS_MCP_URL", "http://127.0.0.1:8003/mcp")
+    )
+    resolved_weather = weather or (
+        NeutralWeatherGateway()
+        if flight_status is not None
+        else StreamableHttpWeatherMcpClient(
+            os.getenv("WEATHER_MCP_URL", "http://127.0.0.1:8006/mcp")
+        )
     )
     resolved_publisher = publisher or NatsCandidatePublisher(
         os.getenv("NATS_URL", "nats://127.0.0.1:4222")
@@ -168,6 +181,7 @@ def create_monitoring_agent_app(
     handler = DefaultRequestHandler(
         agent_executor=FlightMonitoringAgentExecutor(
             flight_status=resolved_flight_status,
+            weather=resolved_weather,
             store=resolved_store,
             publisher=resolved_publisher,
         ),

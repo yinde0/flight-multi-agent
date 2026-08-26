@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Decision-critical golden output for weather corroboration and graceful degradation.",
+  "polls": [
+    {"status": "baseline_stored", "weather_status": "available", "candidate_published": false},
+    {"status": "candidate_evaluated", "weather_status": "available", "category": "WEATHER_RISK", "weather_risk_level": "low", "delay_minutes": 0, "corroborated": false, "verdict": "SUPPRESS", "reason_codes": ["MINOR_WEATHER_ONLY"], "confirmed": false},
+    {"status": "candidate_evaluated", "weather_status": "available", "category": "WEATHER_RISK", "weather_risk_level": "severe", "delay_minutes": 0, "corroborated": false, "verdict": "SUPPRESS", "reason_codes": ["WEATHER_UNCORROBORATED"], "confirmed": false},
+    {"status": "candidate_evaluated", "weather_status": "available", "category": "DELAY", "weather_risk_level": "severe", "delay_minutes": 45, "corroborated": true, "verdict": "NOTIFY", "reason_codes": ["DELAY_NOTIFY_THRESHOLD", "SEVERE_WEATHER_CORROBORATED"], "confirmed": true},
+    {"status": "unchanged", "weather_status": "available", "candidate_published": false},
+    {"status": "candidate_evaluated", "weather_status": "available", "category": "WEATHER_RISK", "weather_risk_level": "none", "delay_minutes": 45, "corroborated": false, "verdict": "SUPPRESS", "reason_codes": ["WEATHER_CLEARED"], "confirmed": false},
+    {"status": "unchanged", "weather_status": "unavailable", "candidate_published": false}
+  ]
+}
