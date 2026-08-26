@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "request_id": "req_fixture_duffel_001"
+  },
+  "data": {
+    "id": "orq_fixture_duffel_001",
+    "live_mode": false,
+    "offers": [
+      {
+        "id": "off_fixture_duffel_001",
+        "live_mode": false,
+        "total_amount": "124.50",
+        "total_currency": "GBP",
+        "expires_at": "2030-09-15T08:30:00Z",
+        "owner": {
+          "name": "Fixture Airways",
+          "iata_code": "ZZ"
+        },
+        "slices": [
+          {
+            "segments": [
+              {
+                "marketing_carrier": {"iata_code": "ZZ"},
+                "operating_carrier": {"iata_code": "ZZ"},
+                "marketing_carrier_flight_number": "304",
+                "operating_carrier_flight_number": "304",
+                "origin": {
+                  "iata_code": "LHR",
+                  "time_zone": "Europe/London"
+                },
+                "destination": {
+                  "iata_code": "CDG",
+                  "time_zone": "Europe/Paris"
+                },
+                "departing_at": "2026-09-15T10:00:00",
+                "arriving_at": "2026-09-15T12:20:00"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

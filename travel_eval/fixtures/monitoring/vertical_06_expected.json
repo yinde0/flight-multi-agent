@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Golden post-Eval search consequences for a cancellation.",
+  "polls": [
+    {"status": "baseline_stored", "candidate_published": false, "notification_status": "not_required", "search_status": "not_required"},
+    {"status": "candidate_evaluated", "category": "CANCELLATION", "verdict": "NOTIFY_AND_SEARCH", "confirmed": true, "notification_status": "delivered", "search_status": "completed", "alternative_ids": ["option-direct-fast", "option-one-stop"], "rejection_summary": {"CONNECTION_TOO_SHORT": 1, "ORIGINAL_FLIGHT": 1, "OUTSIDE_SEARCH_WINDOW": 1, "ROUTE_MISMATCH": 1, "TOO_MANY_STOPS": 1}, "source_scope": "synthetic_replay", "booking_authorized": false, "booking_guaranteed": false, "availability_verified": false},
+    {"status": "unchanged", "candidate_published": false, "notification_status": "not_required", "search_status": "not_required"}
+  ]
+}

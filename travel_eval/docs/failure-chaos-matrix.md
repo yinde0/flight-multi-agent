@@ -25,11 +25,17 @@
 | F21 | Cache is empty after restart | Re-establish baseline before diffing | First observation produces no alert | Planned restart test |
 | F22 | Provider timestamps have clock skew | Order by accepted source version and bounds | No state regression | Planned integration test |
 | F23 | Malformed MCP tool output | Fail schema validation and quarantine evidence | No candidate or action | Planned contract test |
-| F24 | Search provider returns impossible connection | Filter alternative | No infeasible itinerary presented | Planned search test |
-| F25 | Search result fare expires | Mark stale; do not claim availability | No booking implication | Planned search test |
+| F24 | Search provider returns impossible connection | Filter alternative | No infeasible itinerary presented | Automated unit + vertical-06 golden |
+| F25 | Search result fare expires | Reject stale offer; do not present it | `OFFER_EXPIRED`; no booking implication | Automated unit: Duffel expiry |
 | F26 | Secret or PII appears in logs | Redaction filter removes it | Security scan passes | Planned observability test |
 | F27 | Light rain with unchanged flight state | Retain and suppress weather-only candidate | `MINOR_WEATHER_ONLY` | Automated: vertical-04 poll 2 |
 | F28 | Severe forecast repeats unchanged | Do not publish another candidate | Candidate count remains unchanged | Automated: vertical-04 poll 5 |
 | F29 | Severe weather and 45-minute delay coincide | Keep flight-impact verdict and attach corroboration | One `NOTIFY` with `SEVERE_WEATHER_CORROBORATED` | Automated: vertical-04 poll 4 |
+| F30 | Search consumer receives `NOTIFY` | Reject before MCP call | Zero search-provider calls | Automated security unit |
+| F31 | Confirmed search event is redelivered | Reuse stored result | One search-provider call | Automated idempotency unit |
+| F32 | Flight-search MCP fails | Store failure with no alternatives | `FLIGHT_SEARCH_MCP_FAILED`; no fabricated option | Automated unit |
+| F33 | Search provider returns wrong route, original flight, or excessive stops | Filter each unsafe option | Only two feasible ranked alternatives | Automated: vertical-06 |
+| F34 | Duffel returns test-mode offers | Label as test evidence | `provider_test_offers`; availability false | Automated unit + networked Duffel vertical |
+| F35 | Duffel error body contains a secret | Return only sanitized status/code | Token and response message absent | Automated security unit |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

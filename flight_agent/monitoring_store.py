@@ -43,6 +43,14 @@ class MonitoringStore(Protocol):
         self, decision_id: str, *, timeout_seconds: float
     ) -> dict[str, Any] | None: ...
 
+    def get_search(self, decision_id: str) -> dict[str, Any] | None: ...
+
+    def put_search(self, decision_id: str, search: dict[str, Any]) -> None: ...
+
+    def wait_for_search(
+        self, decision_id: str, *, timeout_seconds: float
+    ) -> dict[str, Any] | None: ...
+
     def get_decision(self, candidate_id: str) -> dict[str, Any] | None: ...
 
     def put_decision(self, candidate_id: str, decision: dict[str, Any]) -> None: ...
@@ -211,6 +219,23 @@ class DynamoMonitoringStateStore:
             notification = self.get_notification(decision_id)
             if notification is not None:
                 return notification
+            time.sleep(0.05)
+        return None
+
+    def get_search(self, decision_id: str) -> dict[str, Any] | None:
+        return self._payload(self._get(f"DECISION#{decision_id}", "SEARCH"))
+
+    def put_search(self, decision_id: str, search: dict[str, Any]) -> None:
+        self._put(f"DECISION#{decision_id}", "SEARCH", search)
+
+    def wait_for_search(
+        self, decision_id: str, *, timeout_seconds: float
+    ) -> dict[str, Any] | None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            search = self.get_search(decision_id)
+            if search is not None:
+                return search
             time.sleep(0.05)
         return None
 

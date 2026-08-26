@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/flight_search_result.schema.json",
+  "title": "Read-Only Flight Search Action Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "search_id", "candidate_id", "decision_id", "trip_id",
+    "leg_id", "verdict", "status", "idempotency_key", "alternatives",
+    "rejection_summary", "availability_verified", "booking_guaranteed",
+    "booking_authorized", "recorded_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "search_id": {"type": "string"},
+    "candidate_id": {"type": "string"},
+    "decision_id": {"type": "string"},
+    "trip_id": {"type": "string"},
+    "leg_id": {"type": "string"},
+    "verdict": {"enum": ["NOTIFY", "NOTIFY_AND_SEARCH"]},
+    "status": {"enum": ["completed", "no_options", "failed", "rejected"]},
+    "idempotency_key": {"type": "string", "minLength": 1},
+    "provider": {"type": ["string", "null"]},
+    "source_scope": {"type": ["string", "null"], "enum": ["synthetic_replay", "schedule_only", "provider_test_offers", "live_offers", null]},
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank", "option_id", "segments", "stops", "departure_at", "arrival_at",
+          "price", "offer_expires_at", "owner_name", "owner_iata_code",
+          "passenger_count", "live_mode", "availability_status"
+        ],
+        "properties": {
+          "rank": {"type": "integer", "minimum": 1},
+          "option_id": {"type": "string"},
+          "segments": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/segment"}
+          },
+          "stops": {"type": "integer", "minimum": 0},
+          "departure_at": {"type": "string", "format": "date-time"},
+          "arrival_at": {"type": "string", "format": "date-time"},
+          "price": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["amount", "currency"],
+                "properties": {
+                  "amount": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]{1,6})?$"},
+                  "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}
+                }
+              }
+            ]
+          },
+          "offer_expires_at": {"type": ["string", "null"], "format": "date-time"},
+          "owner_name": {"type": ["string", "null"]},
+          "owner_iata_code": {"type": ["string", "null"]},
+          "passenger_count": {"type": "integer", "minimum": 1, "maximum": 9},
+          "live_mode": {"type": ["boolean", "null"]},
+          "availability_status": {"enum": ["schedule_only", "synthetic_replay", "provider_test_offer", "live_offer"]}
+        }
+      }
+    },
+    "rejection_summary": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+    "availability_verified": {"type": "boolean"},
+    "booking_guaranteed": {"const": false},
+    "booking_authorized": {"const": false},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "error_code": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["flight_iata", "origin", "destination", "departure_at", "arrival_at"],
+      "properties": {
+        "flight_iata": {"type": "string", "pattern": "^[A-Z0-9]{2,3}[0-9]{1,4}$"},
+        "origin": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "destination": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "departure_at": {"type": "string", "format": "date-time"},
+        "arrival_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

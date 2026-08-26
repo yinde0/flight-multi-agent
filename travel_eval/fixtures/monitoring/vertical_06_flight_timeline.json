@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0.0",
+  "flight_iata": "NB204",
+  "flight_date": "2026-09-15",
+  "description": "Baseline, cancellation, then unchanged cancellation for the authorized search slice.",
+  "observations": [
+    {
+      "schema_version": "1.0.0",
+      "observation_id": "obs-v6-001",
+      "observed_at": "2026-09-15T06:00:00Z",
+      "source": "mock-aviationstack",
+      "source_event_time": "2026-09-15T05:59:00Z",
+      "status": "scheduled",
+      "departure": {"scheduled_at": "2026-09-15T08:20:00Z", "estimated_at": "2026-09-15T08:20:00Z", "actual_at": null, "terminal": "5", "gate": "A10"},
+      "arrival": {"scheduled_at": "2026-09-15T09:35:00Z", "estimated_at": "2026-09-15T09:35:00Z", "actual_at": null, "terminal": "2", "gate": null},
+      "departure_airport": "LHR",
+      "destination_airport": "CDG",
+      "data_freshness_seconds": 60,
+      "confidence": 0.99
+    },
+    {
+      "schema_version": "1.0.0",
+      "observation_id": "obs-v6-002",
+      "observed_at": "2026-09-15T06:05:00Z",
+      "source": "mock-aviationstack",
+      "source_event_time": "2026-09-15T06:04:00Z",
+      "status": "cancelled",
+      "departure": {"scheduled_at": "2026-09-15T08:20:00Z", "estimated_at": "2026-09-15T08:20:00Z", "actual_at": null, "terminal": "5", "gate": "A10"},
+      "arrival": {"scheduled_at": "2026-09-15T09:35:00Z", "estimated_at": "2026-09-15T09:35:00Z", "actual_at": null, "terminal": "2", "gate": null},
+      "departure_airport": "LHR",
+      "destination_airport": "CDG",
+      "data_freshness_seconds": 60,
+      "confidence": 0.99
+    },
+    {
+      "schema_version": "1.0.0",
+      "observation_id": "obs-v6-003",
+      "observed_at": "2026-09-15T06:10:00Z",
+      "source": "mock-aviationstack",
+      "source_event_time": "2026-09-15T06:09:00Z",
+      "status": "cancelled",
+      "departure": {"scheduled_at": "2026-09-15T08:20:00Z", "estimated_at": "2026-09-15T08:20:00Z", "actual_at": null, "terminal": "5", "gate": "A10"},
+      "arrival": {"scheduled_at": "2026-09-15T09:35:00Z", "estimated_at": "2026-09-15T09:35:00Z", "actual_at": null, "terminal": "2", "gate": null},
+      "departure_airport": "LHR",
+      "destination_airport": "CDG",
+      "data_freshness_seconds": 60,
+      "confidence": 0.99
+    }
+  ]
+}

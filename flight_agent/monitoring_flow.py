@@ -149,6 +149,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "mcp_calls": 1,
                         "weather_evidence": {"status": "not_requested"},
                         "notification_action": {"status": "not_required"},
+                        "search_action": {"status": "not_required"},
                         "candidate_events_published": 0,
                     },
                 )
@@ -158,6 +159,8 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
             **provider_observation,
             "trip_id": request.trip_id,
             "leg_id": request.leg_id,
+            "flight_iata": request.flight_iata,
+            "flight_date": request.flight_date,
         }
         # The flight provider's old weather field is compatibility input only.
         # Weather evidence must come through the dedicated weather MCP now.
@@ -317,6 +320,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "mcp_calls": 2,
                         "weather_evidence": weather_meta,
                         "notification_action": {"status": "not_required"},
+                        "search_action": {"status": "not_required"},
                         "candidate_events_published": 0,
                     },
                 )
@@ -328,6 +332,8 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
         )
         notification = None
         notification_status = "not_required"
+        search = None
+        search_status = "not_required"
         if decision and confirmed_event:
             notification = self._store.wait_for_notification(
                 decision["decision_id"], timeout_seconds=5
@@ -337,6 +343,13 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                 if notification is not None
                 else "pending"
             )
+            if decision.get("verdict") == "NOTIFY_AND_SEARCH":
+                search = self._store.wait_for_search(
+                    decision["decision_id"], timeout_seconds=5
+                )
+                search_status = (
+                    str(search["status"]) if search is not None else "pending"
+                )
         return self._set_outcome(
             MonitoringPollOutcome(
                 status="candidate_evaluated" if decision else "evaluation_pending",
@@ -346,6 +359,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                 decision=decision,
                 confirmed_event=confirmed_event,
                 notification=notification,
+                search=search,
                 orchestration={
                     "framework": "crewai-flow",
                     "steps": [
@@ -355,10 +369,12 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "nats.publish_disruption_candidate",
                         "eval_agent.consume_candidate",
                         "notification_action.consume_confirmed",
+                        "flight_search_action.consume_confirmed",
                     ],
                     "mcp_calls": 2,
                     "weather_evidence": weather_meta,
                     "notification_action": {"status": notification_status},
+                    "search_action": {"status": search_status},
                     "candidate_events_published": 1,
                 },
             )
@@ -397,6 +413,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                 "mcp_calls": 2,
                 "weather_evidence": weather_meta,
                 "notification_action": {"status": "not_required"},
+                "search_action": {"status": "not_required"},
                 "candidate_events_published": 0,
             },
         )

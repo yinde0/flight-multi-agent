@@ -96,9 +96,41 @@ The golden requires exactly one recorded delivery for the approved delay and no
 delivery for every suppressed or unchanged poll. See
 [docs/vertical-slice-05.md](docs/vertical-slice-05.md).
 
+## Read-only rebooking-search vertical slice
+
+`NOTIFY_AND_SEARCH` now wakes a separate search action service. It re-verifies
+the Eval decision in DynamoDB, reads the disrupted leg, and calls an isolated
+Flight Search MCP. The normal provider uses Duffel for priced, expiring offers;
+the checked-in deterministic replay remains the exact golden evaluation.
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.search-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_search_test.py
+docker compose -f compose.yaml -f compose.test.yaml -f compose.search-test.yaml down
+```
+
+The cancellation golden requires one notification and one search. Seven raw
+schedule candidates become two ranked alternatives after route, time-window,
+stop-count, chronology, connection, and original-flight filters. The replay
+correctly states `availability_verified: false`; every provider mode fixes
+`booking_guaranteed: false` and `booking_authorized: false`. See
+[docs/vertical-slice-06.md](docs/vertical-slice-06.md).
+
+For a networked Duffel test, place `DUFFEL_TOKEN` in `.env` and run:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.duffel-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_duffel_test.py
+docker compose -f compose.yaml -f compose.test.yaml -f compose.duffel-test.yaml down
+```
+
+Duffel test tokens are reported as `provider_test_offers`; only live-mode
+responses are reported as `live_offers`. Both retain
+`booking_guaranteed: false` and `booking_authorized: false`.
+
 ## What is included
 
-- Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, and approved notification actions.
+- Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, approved notification actions, and authorized read-only searches.
 - A versioned suppression policy with explicit thresholds and safety invariants.
 - Three synthetic PDF fixtures: a clean direct trip, a clean connection, and an ambiguous raster scan that must trigger review.
 - Six replay scenarios covering unchanged state, gate churn, escalating delay, cancellation replay, connection risk, and uncorroborated weather risk.
@@ -142,6 +174,7 @@ travel_eval/
   fixtures/documents/      Expected document parsing results and manifest
   fixtures/scenarios/      Inputs plus curated golden outcomes
   fixtures/monitoring/     Stateful flight-status timeline and expected decisions
+  fixtures/search/         Synthetic schedule candidates for search evaluation
   clock.py                 Virtual clock
   engine.py                Normalization, diffing, scoring, and replay
   policy.py                Deterministic significance policy
@@ -159,10 +192,10 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-The flight-status, weather, and notification MCP tools, NATS event path, DynamoDB
-state adapter, Monitoring Agent, Eval Agent, and post-Eval action service now
-exist. Later vertical slices will add rebooking search. RDS and S3 adapters can
-replace fixture-backed itinerary inputs
-without changing the canonical contracts. The notification MCP must only be
-reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must
-never be interpreted as permission to purchase or cancel travel.
+The flight-status, weather, notification, and read-only flight-search MCP tools,
+NATS event path, DynamoDB state adapter, Monitoring Agent, Eval Agent, and
+post-Eval action services now exist. RDS and S3 adapters can replace
+fixture-backed itinerary inputs without changing the canonical contracts. The
+capability MCPs are reachable only from their post-evaluation action services,
+and `NOTIFY_AND_SEARCH` is never interpreted as permission to purchase, hold,
+exchange, or cancel travel.

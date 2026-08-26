@@ -221,6 +221,84 @@ services:
       - travel-internal
       - notification-internal
 
+  flight-search-mcp:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.flight_search_mcp:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8009"
+    environment:
+      FLIGHT_SEARCH_PROVIDER: ${FLIGHT_SEARCH_PROVIDER:-duffel}
+      DUFFEL_TOKEN: ${DUFFEL_TOKEN:-}
+      DUFFEL_BASE_URL: ${DUFFEL_BASE_URL:-https://api.duffel.com}
+      DUFFEL_TIMEOUT_SECONDS: ${DUFFEL_TIMEOUT_SECONDS:-30}
+      DUFFEL_SUPPLIER_TIMEOUT_MS: ${DUFFEL_SUPPLIER_TIMEOUT_MS:-10000}
+      DUFFEL_MAX_OFFERS: ${DUFFEL_MAX_OFFERS:-100}
+      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_06_options.json
+    expose:
+      - "8009"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8009/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - search-internal
+      - search-egress
+
+  flight-search-action-service:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.flight_search_action_service:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8010"
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: eu-west-2
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MONITORING_TABLE_NAME: travel-monitoring-state
+      NATS_URL: nats://nats:4222
+      FLIGHT_SEARCH_MCP_URL: http://flight-search-mcp:8009/mcp
+      NO_PROXY: flight-search-mcp,dynamodb-local,nats,localhost,127.0.0.1
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+      eval-agent:
+        condition: service_healthy
+      flight-search-mcp:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    expose:
+      - "8010"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+      - search-internal
+
   monitor-agent:
     build:
       context: .
@@ -248,6 +326,8 @@ services:
       eval-agent:
         condition: service_healthy
       notification-action-service:
+        condition: service_healthy
+      flight-search-action-service:
         condition: service_healthy
       flight-status-mcp:
         condition: service_healthy
@@ -348,6 +428,9 @@ networks:
   weather-egress:
   notification-internal:
     internal: true
+  search-internal:
+    internal: true
+  search-egress:
 
 volumes:
   dynamodb-data:

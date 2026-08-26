@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Synthetic schedule candidates with two feasible options and five deterministic rejection cases.",
+  "options": [
+    {
+      "option_id": "option-direct-fast",
+      "segments": [
+        {"flight_iata": "NB310", "origin": "LHR", "destination": "CDG", "departure_at": "2026-09-15T09:30:00Z", "arrival_at": "2026-09-15T10:50:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-one-stop",
+      "segments": [
+        {"flight_iata": "NB410", "origin": "LHR", "destination": "AMS", "departure_at": "2026-09-15T09:00:00Z", "arrival_at": "2026-09-15T10:00:00Z"},
+        {"flight_iata": "NB411", "origin": "AMS", "destination": "CDG", "departure_at": "2026-09-15T11:00:00Z", "arrival_at": "2026-09-15T12:15:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-original-flight",
+      "segments": [
+        {"flight_iata": "NB204", "origin": "LHR", "destination": "CDG", "departure_at": "2026-09-15T08:20:00Z", "arrival_at": "2026-09-15T09:35:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-too-early",
+      "segments": [
+        {"flight_iata": "NB300", "origin": "LHR", "destination": "CDG", "departure_at": "2026-09-15T07:30:00Z", "arrival_at": "2026-09-15T08:45:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-wrong-route",
+      "segments": [
+        {"flight_iata": "NB320", "origin": "LHR", "destination": "AMS", "departure_at": "2026-09-15T10:00:00Z", "arrival_at": "2026-09-15T11:10:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-short-connection",
+      "segments": [
+        {"flight_iata": "NB420", "origin": "LHR", "destination": "AMS", "departure_at": "2026-09-15T09:15:00Z", "arrival_at": "2026-09-15T10:00:00Z"},
+        {"flight_iata": "NB421", "origin": "AMS", "destination": "CDG", "departure_at": "2026-09-15T10:20:00Z", "arrival_at": "2026-09-15T11:30:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-too-many-stops",
+      "segments": [
+        {"flight_iata": "NB430", "origin": "LHR", "destination": "BRU", "departure_at": "2026-09-15T09:00:00Z", "arrival_at": "2026-09-15T10:00:00Z"},
+        {"flight_iata": "NB431", "origin": "BRU", "destination": "AMS", "departure_at": "2026-09-15T11:00:00Z", "arrival_at": "2026-09-15T12:00:00Z"},
+        {"flight_iata": "NB432", "origin": "AMS", "destination": "CDG", "departure_at": "2026-09-15T13:00:00Z", "arrival_at": "2026-09-15T14:00:00Z"}
+      ]
+    }
+  ]
+}

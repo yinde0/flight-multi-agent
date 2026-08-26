@@ -117,5 +117,6 @@ class MonitoringPollOutcome(BaseModel):
     decision: dict[str, Any] | None = None
     confirmed_event: dict[str, Any] | None = None
     notification: dict[str, Any] | None = None
+    search: dict[str, Any] | None = None
     error_code: str | None = None
     orchestration: dict[str, Any]
