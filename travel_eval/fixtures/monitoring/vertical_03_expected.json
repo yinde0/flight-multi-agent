@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Decision-critical golden output for the six-poll stateful monitoring timeline.",
+  "polls": [
+    {
+      "status": "baseline_stored",
+      "candidate_published": false
+    },
+    {
+      "status": "unchanged",
+      "candidate_published": false
+    },
+    {
+      "status": "candidate_evaluated",
+      "category": "GATE_CHANGE",
+      "delay_minutes": 0,
+      "verdict": "SUPPRESS",
+      "reason_codes": ["GATE_ONLY_CHANGE"],
+      "confirmed": false
+    },
+    {
+      "status": "candidate_evaluated",
+      "category": "DELAY",
+      "delay_minutes": 20,
+      "verdict": "SUPPRESS",
+      "reason_codes": ["DELAY_BELOW_NOTIFY_THRESHOLD"],
+      "confirmed": false
+    },
+    {
+      "status": "candidate_evaluated",
+      "category": "DELAY",
+      "delay_minutes": 45,
+      "verdict": "NOTIFY",
+      "reason_codes": ["DELAY_NOTIFY_THRESHOLD"],
+      "confirmed": true
+    },
+    {
+      "status": "unchanged",
+      "candidate_published": false
+    }
+  ]
+}

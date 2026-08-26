@@ -33,3 +33,9 @@ services:
     depends_on:
       mistral-ocr-stub:
         condition: service_healthy
+
+  flight-status-mcp:
+    environment:
+      FLIGHT_STATUS_PROVIDER: replay
+      AviationStack_API_KEY: local-unused
+      FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json

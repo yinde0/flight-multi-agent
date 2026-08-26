@@ -1,6 +1,6 @@
 # Travel Disruption Evaluation Package
 
-This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. Its executable document path now supports both native-text PDFs and image-only scans through a CrewAI flow over A2A.
+This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. Its executable vertical paths now parse native-text and image-only PDFs, then statefully monitor flight-status changes and evaluate whether they are significant.
 
 The package defines the contracts those components must satisfy and provides deterministic scenario replay before any application implementation exists.
 
@@ -40,6 +40,32 @@ does not need an API key, spend credits, or send fixture documents outside Docke
 For a real Mistral call, copy `.env.example` to `.env`, set `MISTRAL_API_KEY`, and use
 `docker compose up --build -d --wait` without the test overlay.
 
+## Stateful monitoring vertical slice
+
+The next complete path uses every agreed integration boundary:
+
+```text
+Travel API -> A2A Monitoring Agent -> MCP Flight Status
+                                     -> DynamoDB last-known state
+                                     -> NATS disruption_candidate -> Eval Agent
+                                                                   -> disruption_confirmed
+```
+
+Run the deterministic six-poll timeline, restart the Monitoring Agent after its
+baseline, and compare the real output with the checked-in golden result:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_monitoring_test.py --restart-monitor
+docker compose -f compose.yaml -f compose.test.yaml down
+```
+
+The expected policy behavior is: no event for unchanged state, suppress a
+gate-only change, suppress a 20-minute delay, confirm a 45-minute delay exactly
+once, and do not re-alert when that status remains unchanged. See
+[docs/vertical-slice-03.md](docs/vertical-slice-03.md) for the architecture,
+golden table, live AviationStack command, and failure rules.
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, and approved notification actions.
@@ -57,8 +83,8 @@ From the repository root:
 
 ```powershell
 uv run python -m travel_eval.runner
-uv sync --extra app
-uv run python -m unittest discover -s tests -v
+uv sync --extra app --extra test
+uv run python -m pytest -q
 ```
 
 The CLI exits non-zero when an automated acceptance threshold fails. Use `--show-results` to inspect the full derived evidence:
@@ -85,6 +111,7 @@ travel_eval/
   policies/                Versioned suppression rules
   fixtures/documents/      Expected document parsing results and manifest
   fixtures/scenarios/      Inputs plus curated golden outcomes
+  fixtures/monitoring/     Stateful flight-status timeline and expected decisions
   clock.py                 Virtual clock
   engine.py                Normalization, diffing, scoring, and replay
   policy.py                Deterministic significance policy
@@ -102,4 +129,10 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-Later vertical slices will add MCP flight/weather tools, the event bus, stateful monitoring, evaluation, and post-approval notification. RDS, DynamoDB, and S3 adapters can replace local fixture adapters without changing the canonical contracts. The notification MCP tool must only be reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must never be interpreted as permission to purchase or cancel travel.
+The flight-status MCP tool, NATS event path, DynamoDB state adapter, Monitoring
+Agent, and Eval Agent now exist. Later vertical slices will add independently
+corroborated OpenWeatherMap observations, the post-approval notification MCP, and
+rebooking search. RDS and S3 adapters can replace fixture-backed itinerary inputs
+without changing the canonical contracts. The notification MCP must only be
+reachable from the post-evaluation action service, and `NOTIFY_AND_SEARCH` must
+never be interpreted as permission to purchase or cancel travel.

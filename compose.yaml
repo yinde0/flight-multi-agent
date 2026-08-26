@@ -1,4 +1,167 @@
 services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    # The official image runs as uid 1000, while a fresh named volume is
+    # root-owned. Root is acceptable for this local emulator and lets SQLite
+    # create its durable database file.
+    user: root
+    command:
+      - -jar
+      - DynamoDBLocal.jar
+      - -sharedDb
+      - -dbPath
+      - ./data
+      - -disableTelemetry
+    working_dir: /home/dynamodblocal
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    expose:
+      - "8000"
+    networks:
+      - travel-internal
+
+  nats:
+    image: nats:2.11-alpine
+    command:
+      - -js
+      - -m
+      - "8222"
+      - --store_dir
+      - /data
+    volumes:
+      - nats-data:/data
+    expose:
+      - "4222"
+      - "8222"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:8222/healthz
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 3s
+    networks:
+      - travel-internal
+
+  flight-status-mcp:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.flight_status_mcp:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8003"
+    environment:
+      FLIGHT_STATUS_PROVIDER: ${FLIGHT_STATUS_PROVIDER:-aviationstack}
+      AviationStack_API_KEY: ${AviationStack_API_KEY:-}
+      AVIATIONSTACK_BASE_URL: ${AVIATIONSTACK_BASE_URL:-https://api.aviationstack.com/v1}
+      AVIATIONSTACK_TIMEOUT_SECONDS: ${AVIATIONSTACK_TIMEOUT_SECONDS:-30}
+      FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json
+    expose:
+      - "8003"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+      - flight-egress
+
+  eval-agent:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.eval_service:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8005"
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: eu-west-2
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MONITORING_TABLE_NAME: travel-monitoring-state
+      NATS_URL: nats://nats:4222
+      SUPPRESSION_POLICY_PATH: /app/travel_eval/policies/suppression_policy.v1.json
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+      nats:
+        condition: service_healthy
+    expose:
+      - "8005"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+
+  monitor-agent:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.monitoring_a2a:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8004"
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: eu-west-2
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MONITORING_TABLE_NAME: travel-monitoring-state
+      FLIGHT_STATUS_MCP_URL: http://flight-status-mcp:8003/mcp
+      MONITOR_AGENT_PUBLIC_URL: http://monitor-agent:8004
+      NATS_URL: nats://nats:4222
+      NO_PROXY: flight-status-mcp,dynamodb-local,nats,monitor-agent,localhost,127.0.0.1
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+      eval-agent:
+        condition: service_healthy
+      flight-status-mcp:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    expose:
+      - "8004"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+
   document-agent:
     build:
       context: .
@@ -45,8 +208,12 @@ services:
       - "8000"
     environment:
       DOCUMENT_AGENT_URL: http://document-agent:8001
+      MONITOR_AGENT_URL: http://monitor-agent:8004
+      NO_PROXY: document-agent,monitor-agent,localhost,127.0.0.1
     depends_on:
       document-agent:
+        condition: service_healthy
+      monitor-agent:
         condition: service_healthy
     ports:
       - "8080:8000"
@@ -69,3 +236,8 @@ networks:
     internal: true
   travel-edge:
   document-egress:
+  flight-egress:
+
+volumes:
+  dynamodb-data:
+  nats-data:

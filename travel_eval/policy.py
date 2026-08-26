@@ -76,7 +76,7 @@ class SuppressionPolicy:
             verdict = "SUPPRESS"
             reason_codes = ["NON_ACTIONABLE_STATUS_CHANGE"]
 
-        episode_key = f"{candidate['leg_id']}:{category}"
+        episode_key = f"{candidate['trip_id']}:{candidate['leg_id']}:{category}"
         band = self.severity_band(candidate)
         previous_band = state.highest_notified_band.get(episode_key, -1)
 

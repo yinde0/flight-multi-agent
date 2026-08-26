@@ -12,11 +12,15 @@ dependencies = []
 [project.optional-dependencies]
 validation = ["jsonschema>=4.23,<5"]
 pdf-fixtures = ["reportlab>=4,<5", "pillow>=10,<12", "pypdf>=5,<7", "pdfplumber>=0.11,<1", "pypdfium2>=4,<6"]
+test = ["pytest>=8,<9"]
 app = [
   "a2a-sdk[fastapi]>=1.0.3,<2",
+  "boto3>=1.35,<2",
   "crewai>=1.15.17,<2",
   "fastapi>=0.115.2,<1",
   "httpx>=0.28.1,<1",
+  "mcp>=1.28.1,<2",
+  "nats-py>=2.10,<3",
   "pypdf>=5,<7",
   "python-multipart>=0.0.20,<1",
   "uvicorn[standard]>=0.35,<1"
