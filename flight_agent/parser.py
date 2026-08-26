@@ -4,7 +4,7 @@ import re
 
 from datetime import datetime, timezone
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pypdf import PdfReader
@@ -22,6 +22,15 @@ AIRPORT_TIMEZONES = {
 ROUTE_RE = re.compile(r"^(?P<origin>[A-Z]{3})\s+to\s+(?P<destination>[A-Z]{3})$")
 FLIGHT_RE = re.compile(r"^(?P<carrier>[A-Z0-9]{2,3})\s+(?P<number>[0-9]{1,4})$")
 PNR_RE = re.compile(r"^[A-Z0-9]{6}$")
+IATA_IN_PARENS_RE = re.compile(r"\(([A-Z]{3})\)")
+TRAVEL_DATE_RE = re.compile(
+    r"\b(?P<day>[0-3]?[0-9])\s+(?P<month>[A-Z]{3})\s+(?P<year>20[0-9]{2})\b",
+    re.IGNORECASE,
+)
+AMBIGUOUS_FLIGHT_RE = re.compile(r"\b[A-Z0-9]{2,3}\s+[0-9?]*\?[0-9?]*\b")
+AMBIGUOUS_DEPARTURE_RE = re.compile(
+    r"\bdeparture\s+[0-2]?[0-9]:[0-5?][0-9?]", re.IGNORECASE
+)
 
 
 class IncompleteItineraryError(ValueError):
@@ -116,7 +125,12 @@ def structure_itinerary(text: str, metadata: DocumentMetadata) -> dict[str, Any]
 
 
 def review_outcome(
-    metadata: DocumentMetadata, *, reason_codes: list[str]
+    metadata: DocumentMetadata,
+    *,
+    reason_codes: list[str],
+    safe_partial_extraction: dict[str, Any] | None = None,
+    must_not_infer: list[str] | None = None,
+    orchestration: dict[str, Any] | None = None,
 ) -> ParseOutcome:
     """Build an explicit abstention that contains no invented itinerary fields."""
 
@@ -128,22 +142,98 @@ def review_outcome(
             "fixture_id": metadata.fixture_id,
             "review_required": True,
             "reason_codes": reason_codes,
-            "safe_partial_extraction": {},
-            "must_not_infer": [
+            "safe_partial_extraction": safe_partial_extraction or {},
+            "must_not_infer": must_not_infer
+            or [
                 "confirmation_code",
                 "flight_number",
                 "scheduled_departure_at",
             ],
         },
-        orchestration={
-            "framework": "crewai-flow",
-            "steps": ["extract_pdf_text", "request_human_review"],
-            "llm_calls": 0,
-        },
+        orchestration=orchestration
+        or _orchestration("pdf_text_layer", "request_human_review"),
     )
 
 
-def parse_extracted_text(text: str, metadata: DocumentMetadata) -> ParseOutcome:
+def _orchestration(
+    text_source: Literal["pdf_text_layer", "mistral_ocr"],
+    final_step: Literal["structure_itinerary", "request_human_review"],
+    *,
+    ocr_details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    steps = ["extract_pdf_text"]
+    if text_source == "mistral_ocr":
+        steps.append("mistral_ocr")
+    steps.append(final_step)
+    result: dict[str, Any] = {
+        "framework": "crewai-flow",
+        "steps": steps,
+        "llm_calls": 0,
+        "ocr_calls": 1 if text_source == "mistral_ocr" else 0,
+        "text_source": text_source,
+    }
+    if ocr_details:
+        result["ocr"] = ocr_details
+    return result
+
+
+def _safe_partial_from_ocr(text: str) -> dict[str, str]:
+    partial: dict[str, str] = {}
+    airports: list[str] = []
+    for airport in IATA_IN_PARENS_RE.findall(text.upper()):
+        if airport not in airports:
+            airports.append(airport)
+    if len(airports) >= 2:
+        partial["origin"] = airports[0]
+        partial["destination"] = airports[1]
+
+    match = TRAVEL_DATE_RE.search(text)
+    if match:
+        try:
+            parsed = datetime.strptime(
+                " ".join(
+                    [match.group("day"), match.group("month"), match.group("year")]
+                ),
+                "%d %b %Y",
+            )
+            partial["travel_date"] = parsed.date().isoformat()
+        except ValueError:
+            pass
+    return partial
+
+
+def _ocr_review_reasons(text: str) -> list[str]:
+    reasons: list[str] = []
+    normalized_lines = [line.strip("#* _`") for line in text.splitlines()]
+    booking_label_indexes = [
+        index
+        for index, line in enumerate(normalized_lines)
+        if line.lower() == "booking reference"
+    ]
+    has_confirmation_code = False
+    for index in booking_label_indexes:
+        following_line = next(
+            (line for line in normalized_lines[index + 1 :] if line), ""
+        )
+        has_confirmation_code = bool(PNR_RE.fullmatch(following_line))
+        if has_confirmation_code:
+            break
+    if booking_label_indexes and not has_confirmation_code:
+        reasons.append("CONFIRMATION_CODE_REDACTED")
+    if AMBIGUOUS_FLIGHT_RE.search(text.upper()):
+        reasons.append("LOW_OCR_CONFIDENCE_FLIGHT_NUMBER")
+    if "?" in text and AMBIGUOUS_DEPARTURE_RE.search(text):
+        reasons.append("LOW_OCR_CONFIDENCE_DEPARTURE_TIME")
+    return reasons or ["OCR_TEXT_INCOMPLETE"]
+
+
+def parse_extracted_text(
+    text: str,
+    metadata: DocumentMetadata,
+    *,
+    text_source: Literal["pdf_text_layer", "mistral_ocr"] = "pdf_text_layer",
+    ocr_details: dict[str, Any] | None = None,
+) -> ParseOutcome:
     if not text.strip():
         return review_outcome(
             metadata,
@@ -152,23 +242,36 @@ def parse_extracted_text(text: str, metadata: DocumentMetadata) -> ParseOutcome:
                 "LOW_OCR_CONFIDENCE_FLIGHT_NUMBER",
                 "LOW_OCR_CONFIDENCE_DEPARTURE_TIME",
             ],
+            orchestration=_orchestration(
+                text_source, "request_human_review", ocr_details=ocr_details
+            ),
         )
 
     try:
         itinerary = structure_itinerary(text, metadata)
     except (IncompleteItineraryError, ValueError):
+        if text_source == "mistral_ocr":
+            return review_outcome(
+                metadata,
+                reason_codes=_ocr_review_reasons(text),
+                safe_partial_extraction=_safe_partial_from_ocr(text),
+                orchestration=_orchestration(
+                    text_source, "request_human_review", ocr_details=ocr_details
+                ),
+            )
         return review_outcome(
             metadata,
             reason_codes=["MACHINE_READABLE_TEXT_INCOMPLETE"],
+            orchestration=_orchestration(
+                text_source, "request_human_review", ocr_details=ocr_details
+            ),
         )
 
     return ParseOutcome(
         status="parsed",
         document=metadata,
         itinerary=itinerary,
-        orchestration={
-            "framework": "crewai-flow",
-            "steps": ["extract_pdf_text", "structure_itinerary"],
-            "llm_calls": 0,
-        },
+        orchestration=_orchestration(
+            text_source, "structure_itinerary", ocr_details=ocr_details
+        ),
     )

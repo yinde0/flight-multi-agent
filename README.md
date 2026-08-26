@@ -1,33 +1,44 @@
 # Travel Disruption Evaluation Package
 
-This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system and now includes its first executable vertical slice: PDF upload to a CrewAI document flow over A2A, packaged as two Docker containers.
+This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. Its executable document path now supports both native-text PDFs and image-only scans through a CrewAI flow over A2A.
 
 The package defines the contracts those components must satisfy and provides deterministic scenario replay before any application implementation exists.
 
-## First vertical slice
+## Document vertical slices
 
 The first application path is intentionally thin and testable:
 
 ```text
 PDF upload -> Travel API -> A2A SendMessage -> Document Agent
-           <- canonical itinerary or explicit review request <-
+                                      | native text exists -> deterministic parser
+                                      | no text layer      -> Mistral OCR -> parser
+           <- canonical itinerary, safe partial, or explicit review request <-
 ```
 
 - The API discovers the document agent using `/.well-known/agent-card.json`.
 - The PDF and metadata cross a real A2A 1.0 JSON-RPC boundary.
-- A CrewAI Flow extracts the PDF text layer and structures the itinerary.
+- A CrewAI Flow extracts the native PDF text layer first and calls Mistral OCR only
+  for image-only PDFs.
 - Clean documents are compared exactly with checked-in golden JSON.
-- Image-only documents abstain safely; OCR is the next document slice.
+- The ambiguous scan recovers only safe fields and still abstains on redacted or
+  visibly uncertain values.
+- OCR failures fail closed and return review reason codes instead of guessed data.
 
-See [docs/vertical-slice-01.md](docs/vertical-slice-01.md) for its contract and test commands.
+See [docs/vertical-slice-01.md](docs/vertical-slice-01.md) for the original text-layer
+slice and [docs/vertical-slice-02.md](docs/vertical-slice-02.md) for Mistral OCR.
 
 Run the containerized slice and compare the actual output with the goldens:
 
 ```powershell
-docker compose up --build -d --wait
+docker compose -f compose.yaml -f compose.test.yaml up --build -d --wait
 .\.venv\Scripts\python.exe tools\run_vertical_document_test.py
-docker compose down
+docker compose -f compose.yaml -f compose.test.yaml down
 ```
+
+The test overlay runs a private Mistral-compatible contract stub, so the golden suite
+does not need an API key, spend credits, or send fixture documents outside Docker.
+For a real Mistral call, copy `.env.example` to `.env`, set `MISTRAL_API_KEY`, and use
+`docker compose up --build -d --wait` without the test overlay.
 
 ## What is included
 

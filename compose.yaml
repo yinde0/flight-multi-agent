@@ -13,6 +13,10 @@ services:
       CREWAI_DISABLE_TELEMETRY: "true"
       CREWAI_TESTING: "true"
       DOCUMENT_AGENT_PUBLIC_URL: http://document-agent:8001
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_OCR_BASE_URL: ${MISTRAL_OCR_BASE_URL:-https://api.mistral.ai/v1}
+      MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
+      MISTRAL_OCR_TIMEOUT_SECONDS: ${MISTRAL_OCR_TIMEOUT_SECONDS:-60}
     expose:
       - "8001"
     healthcheck:
@@ -27,6 +31,7 @@ services:
       start_period: 10s
     networks:
       - travel-internal
+      - document-egress
 
   travel-api:
     build:
@@ -63,3 +68,4 @@ networks:
   travel-internal:
     internal: true
   travel-edge:
+  document-egress:

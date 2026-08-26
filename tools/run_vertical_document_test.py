@@ -100,17 +100,24 @@ def judge(case: dict[str, str], actual: dict[str, Any]) -> tuple[bool, Any, Any]
         return actual.get("status") == "parsed" and observed == expected, observed, expected
 
     review = actual.get("review") or {}
+    orchestration = actual.get("orchestration") or {}
     safety_view = {
         "review_required": review.get("review_required"),
         "reason_codes": review.get("reason_codes"),
+        "safe_partial_extraction": review.get("safe_partial_extraction"),
         "must_not_infer": review.get("must_not_infer"),
         "itinerary_is_absent": actual.get("itinerary") is None,
+        "text_source": orchestration.get("text_source"),
+        "ocr_calls": orchestration.get("ocr_calls"),
     }
     expected_view = {
         "review_required": expected["review_required"],
         "reason_codes": expected["reason_codes"],
+        "safe_partial_extraction": expected["safe_partial_extraction"],
         "must_not_infer": expected["must_not_infer"],
         "itinerary_is_absent": True,
+        "text_source": "mistral_ocr",
+        "ocr_calls": 1,
     }
     return safety_view == expected_view, safety_view, expected_view
 

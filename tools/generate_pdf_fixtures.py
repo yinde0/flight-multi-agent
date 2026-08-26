@@ -371,6 +371,7 @@ def main():
                 "path": "output/pdf/redacted_ambiguous_scan.pdf",
                 "sha256": sha256(ambiguous),
                 "expected": "travel_eval/fixtures/documents/expected_ambiguous_parse.json",
+                "ocr_response": "travel_eval/fixtures/documents/mistral_ocr_ambiguous_response.json",
                 "classification": "synthetic-raster-scan",
             },
         ],

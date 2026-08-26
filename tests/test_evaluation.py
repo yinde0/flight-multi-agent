@@ -74,6 +74,8 @@ class ContractAndFixtureTests(unittest.TestCase):
                 self.assertTrue(expected_path.is_file())
                 digest = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
                 self.assertEqual(digest, fixture["sha256"])
+                if "ocr_response" in fixture:
+                    self.assertTrue((ROOT / fixture["ocr_response"]).is_file())
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@
       "path": "output/pdf/redacted_ambiguous_scan.pdf",
       "sha256": "227d6889d4a7beb4f547579c0d70023aeac9d4eb6055318e08c61b14b61a1fbe",
       "expected": "travel_eval/fixtures/documents/expected_ambiguous_parse.json",
+      "ocr_response": "travel_eval/fixtures/documents/mistral_ocr_ambiguous_response.json",
       "classification": "synthetic-raster-scan"
     }
   ]

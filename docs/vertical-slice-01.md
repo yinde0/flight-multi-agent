@@ -11,7 +11,9 @@ header, and returns either:
 - `status: review_required` with explicit fields the system must not infer.
 
 The API is the only host-exposed service. It joins an edge network and the private
-agent network; the document agent joins only the private network.
+agent network. The document agent has no published port; vertical slice 02 adds a
+separate outbound bridge so it can reach Mistral without exposing the agent to the
+host.
 
 ## Components exercised
 
@@ -35,8 +37,8 @@ prompts.
 | Clean connecting itinerary | Parsed itinerary exactly equals its golden JSON |
 | Image-only ambiguous scan | Review is required and no protected field is invented |
 
-The ambiguous golden contains safe partial OCR fields. This first slice does not claim
-those fields because it has no OCR engine. A later OCR slice must recover those safe
+The ambiguous golden contains safe partial OCR fields. This first slice did not claim
+those fields because it had no OCR engine. Vertical slice 02 now recovers those safe
 fields while continuing to abstain on the redacted/low-confidence values.
 
 ## Run locally
@@ -49,9 +51,9 @@ uv run python -m unittest discover -s tests -v
 ## Run through Docker
 
 ```powershell
-docker compose up --build -d --wait
+docker compose -f compose.yaml -f compose.test.yaml up --build -d --wait
 uv run --extra app python tools/run_vertical_document_test.py
-docker compose down
+docker compose -f compose.yaml -f compose.test.yaml down
 ```
 
 The live runner prints observed and expected JSON for every fixture and exits non-zero

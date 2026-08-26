@@ -27,6 +27,7 @@ from fastapi import FastAPI
 
 from flight_agent.contracts import DocumentMetadata
 from flight_agent.flow import run_document_flow
+from flight_agent.ocr import OcrProvider
 
 
 def _request_parts(context: RequestContext) -> tuple[bytes, DocumentMetadata]:
@@ -49,6 +50,9 @@ def _request_parts(context: RequestContext) -> tuple[bytes, DocumentMetadata]:
 
 
 class ItineraryDocumentAgentExecutor(AgentExecutor):
+    def __init__(self, ocr_provider: OcrProvider | None = None) -> None:
+        self._ocr_provider = ocr_provider
+
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
@@ -61,7 +65,7 @@ class ItineraryDocumentAgentExecutor(AgentExecutor):
 
         document_bytes, metadata = _request_parts(context)
         outcome = await asyncio.to_thread(
-            run_document_flow, document_bytes, metadata
+            run_document_flow, document_bytes, metadata, self._ocr_provider
         )
         await updater.add_artifact(
             parts=[Part(data=ParseDict(outcome, Value()))],
@@ -85,10 +89,10 @@ def build_agent_card(public_url: str) -> AgentCard:
     return AgentCard(
         name="Travel Document Parsing Agent",
         description=(
-            "Extracts booked flight legs from itinerary PDFs and abstains when "
-            "decision-critical fields are ambiguous."
+            "Extracts booked flight legs from text or scanned itinerary PDFs, "
+            "and abstains when decision-critical fields are ambiguous."
         ),
-        version="0.1.0",
+        version="0.2.0",
         capabilities=AgentCapabilities(
             streaming=False,
             push_notifications=False,
@@ -100,7 +104,7 @@ def build_agent_card(public_url: str) -> AgentCard:
                 id="parse_itinerary_pdf",
                 name="Parse itinerary PDF",
                 description="Return a canonical itinerary or an explicit review request.",
-                tags=["travel", "document", "itinerary"],
+                tags=["travel", "document", "itinerary", "ocr"],
                 examples=["Parse the attached e-ticket PDF"],
                 input_modes=["application/pdf", "application/json"],
                 output_modes=["application/json"],
@@ -116,13 +120,16 @@ def build_agent_card(public_url: str) -> AgentCard:
     )
 
 
-def create_document_agent_app(public_url: str | None = None) -> FastAPI:
+def create_document_agent_app(
+    public_url: str | None = None,
+    ocr_provider: OcrProvider | None = None,
+) -> FastAPI:
     resolved_url = public_url or os.getenv(
         "DOCUMENT_AGENT_PUBLIC_URL", "http://127.0.0.1:8001"
     )
     card = build_agent_card(resolved_url)
     handler = DefaultRequestHandler(
-        agent_executor=ItineraryDocumentAgentExecutor(),
+        agent_executor=ItineraryDocumentAgentExecutor(ocr_provider),
         task_store=InMemoryTaskStore(),
         agent_card=card,
     )

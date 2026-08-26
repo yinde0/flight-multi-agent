@@ -1,0 +1,18 @@
+{
+  "pages": [
+    {
+      "index": 0,
+      "markdown": "# QUICKWING - ITINERARY RECEIPT\n\nBOOKING REFERENCE\n\nPASSENGER: SAMPLE / TRAVELLER\n\nFLIGHT\n\nQW 7?4\n\nDATE\n\n18 OCT 2026\n\nSTATUS\n\nCONFIRMED\n\nLONDON (LHR)\n\nDeparture 07:4? Terminal 3\n\nLISBON (LIS)\n\nArrival 10:25 Terminal 1\n\nSome characters are unclear in this scan.\n\nVerify the flight number and departure time.",
+      "images": [],
+      "dimensions": {
+        "dpi": 150,
+        "height": 2339,
+        "width": 1654
+      }
+    }
+  ],
+  "model": "mistral-ocr-latest",
+  "usage_info": {
+    "pages_processed": 1
+  }
+}
