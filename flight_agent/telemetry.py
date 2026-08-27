@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import inspect
+import json
 import os
 import threading
 
@@ -18,6 +19,7 @@ _lock = threading.Lock()
 _configured = False
 _export_enabled = False
 _crewai_instrumented = False
+_content_capture_enabled = False
 _service_name = "travel-service"
 _operation_counts: Counter[tuple[str, str]] = Counter()
 
@@ -32,13 +34,62 @@ def hash_reference(value: Any) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:16]
 
 
+def development_content_capture_enabled() -> bool:
+    """Allow content only behind an explicit switch in development."""
+
+    return (
+        os.getenv("DEPLOYMENT_ENVIRONMENT", "development").strip().lower()
+        == "development"
+        and _enabled("OTEL_TRACE_CONTENT_ENABLED")
+    )
+
+
+def _content_text(value: Any) -> str:
+    try:
+        rendered = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+    except Exception:
+        rendered = str(value)
+    maximum = max(
+        256, int(os.getenv("OTEL_TRACE_CONTENT_MAX_CHARS", "12000"))
+    )
+    if len(rendered) <= maximum:
+        return rendered
+    return rendered[:maximum] + "...[truncated]"
+
+
+def _set_span_content(span: Any, direction: str, value: Any) -> None:
+    if span is None or not _content_capture_enabled or value is None:
+        return
+    try:
+        if direction == "input":
+            span.set_attribute("gen_ai.prompt.0.role", "user")
+            span.set_attribute("gen_ai.prompt.0.content", _content_text(value))
+        else:
+            span.set_attribute("gen_ai.completion.0.role", "assistant")
+            span.set_attribute(
+                "gen_ai.completion.0.content", _content_text(value)
+            )
+        span.set_attribute(
+            "langsmith.metadata.content_capture", "development_explicit"
+        )
+    except Exception:
+        # Observability must remain fail-open for business processing.
+        return
+
+
 def configure_telemetry(service_name: str) -> bool:
     """Configure non-blocking OTLP export once per process.
 
     Failure to configure or export telemetry must never fail travel processing.
     """
 
-    global _configured, _export_enabled, _crewai_instrumented, _service_name
+    global _configured, _export_enabled, _crewai_instrumented
+    global _content_capture_enabled, _service_name
     with _lock:
         _service_name = service_name
         if _configured:
@@ -78,20 +129,24 @@ def configure_telemetry(service_name: str) -> bool:
             )
             provider.add_span_processor(BatchSpanProcessor(exporter))
             _export_enabled = True
+            _content_capture_enabled = development_content_capture_enabled()
 
             if (
                 service_name == "document-agent"
                 and _enabled("CREWAI_OTEL_ENABLED")
             ):
-                # Enforce this in-process as well as in Compose so a direct
-                # Python launch cannot accidentally export PDF/OCR content.
-                os.environ.setdefault("TRACELOOP_TRACE_CONTENT", "false")
+                # Production always resolves to false, even if a container is
+                # accidentally launched with a development content flag.
+                os.environ["TRACELOOP_TRACE_CONTENT"] = (
+                    "true" if _content_capture_enabled else "false"
+                )
                 from opentelemetry.instrumentation.crewai import CrewAIInstrumentor
 
                 CrewAIInstrumentor().instrument(tracer_provider=provider)
                 _crewai_instrumented = True
         except Exception:
             _export_enabled = False
+            _content_capture_enabled = False
         return _export_enabled
 
 
@@ -143,6 +198,8 @@ def traced(
     kind: str = "chain",
     attributes: Callable[..., dict[str, Any]] | None = None,
     result_outcome: Callable[[Any], str] | None = None,
+    content_input: Callable[..., Any] | None = None,
+    content_output: Callable[[Any], Any] | None = None,
 ):
     """Trace a sync/async boundary and expose low-cardinality operation counts."""
 
@@ -163,6 +220,22 @@ def traced(
             except Exception:
                 return "unknown"
 
+        def resolved_input_content(args, kwargs) -> Any:
+            if not _content_capture_enabled or content_input is None:
+                return None
+            try:
+                return content_input(*args, **kwargs)
+            except Exception:
+                return None
+
+        def resolved_output_content(result: Any) -> Any:
+            if not _content_capture_enabled or content_output is None:
+                return None
+            try:
+                return content_output(result)
+            except Exception:
+                return None
+
         if inspect.iscoroutinefunction(function):
 
             @functools.wraps(function)
@@ -172,8 +245,14 @@ def traced(
                     service_name=service_name,
                     kind=kind,
                     attributes=resolved_attributes(args, kwargs),
-                ):
+                ) as span:
+                    _set_span_content(
+                        span, "input", resolved_input_content(args, kwargs)
+                    )
                     result = await function(*args, **kwargs)
+                    _set_span_content(
+                        span, "output", resolved_output_content(result)
+                    )
                 _record(operation, resolved_outcome(result))
                 return result
 
@@ -186,8 +265,14 @@ def traced(
                 service_name=service_name,
                 kind=kind,
                 attributes=resolved_attributes(args, kwargs),
-            ):
+            ) as span:
+                _set_span_content(
+                    span, "input", resolved_input_content(args, kwargs)
+                )
                 result = function(*args, **kwargs)
+                _set_span_content(
+                    span, "output", resolved_output_content(result)
+                )
             _record(operation, resolved_outcome(result))
             return result
 
@@ -201,6 +286,7 @@ def metrics_text() -> str:
         counts = dict(_operation_counts)
         export_enabled = _export_enabled
         crewai_enabled = _crewai_instrumented
+        content_enabled = _content_capture_enabled
         service = _service_name
     lines = [
         "# HELP travel_operation_executions_total Completed application operations.",
@@ -220,6 +306,10 @@ def metrics_text() -> str:
             "# TYPE travel_crewai_instrumentation_enabled gauge",
             "travel_crewai_instrumentation_enabled "
             + ("1" if crewai_enabled else "0"),
+            "# HELP travel_trace_content_capture_enabled Whether explicit development content capture is enabled.",
+            "# TYPE travel_trace_content_capture_enabled gauge",
+            "travel_trace_content_capture_enabled "
+            + ("1" if content_enabled else "0"),
             f'# travel_service_name "{service}"',
         ]
     )
@@ -245,5 +335,10 @@ def install_telemetry_routes(
             "service": service_name,
             "trace_export_enabled": _export_enabled,
             "crewai_instrumentation_enabled": _crewai_instrumented,
-            "content_capture_enabled": False,
+            "content_capture_enabled": _content_capture_enabled,
+            "content_capture_scope": (
+                "development_explicit"
+                if _content_capture_enabled
+                else "disabled"
+            ),
         }

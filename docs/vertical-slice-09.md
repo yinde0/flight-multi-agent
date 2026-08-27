@@ -184,6 +184,36 @@ variable. Compose derives the OTLP trace URL from it. Use
 custom OTLP route. Stop the optional stack with the same file list and the
 `down` command.
 
+### Development prompt, input, and output tracing
+
+The document flow currently makes zero LLM calls, so it has no genuine model
+prompt or completion. The development overlay instead maps the deterministic
+flow instruction and input to LangSmith `inputs`, and the canonical parse result
+to `outputs`. CrewAI content instrumentation is also enabled, so a future
+LLM-backed CrewAI Task will expose its real prompt and completion.
+
+This capability requires both an explicit content flag and
+`DEPLOYMENT_ENVIRONMENT=development`. Production forces content capture off even
+if the content flag is accidentally supplied. Use only synthetic or
+appropriately redacted development evidence:
+
+```powershell
+docker compose -f compose.yaml -f compose.langsmith.yaml -f compose.langsmith-development.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_langsmith_document_trace.py
+```
+
+The runner uploads only `synthetic_direct_eticket.pdf`, verifies that
+`document.parse` appears in the configured LangSmith project, and checks that
+both inputs and outputs are visible without printing them in the terminal.
+Remove the development overlay and recreate the normal stack after inspection:
+
+```powershell
+docker compose -f compose.yaml up -d --wait --remove-orphans
+```
+
+The content string is capped by `OTEL_TRACE_CONTENT_MAX_CHARS` (12,000 by
+default). The cap limits trace size; it is not a redaction mechanism.
+
 ## Deliberate limitations
 
 - The operator boundary uses one static bearer-style token. Production should

@@ -56,5 +56,7 @@
 | F52 | The same dead letter is re-driven again | Return its terminal re-drive state | `already_redriven`; provider count unchanged | Automated unit + vertical-09 |
 | F53 | Trace collector is unavailable | Continue business processing; batch exporter may drop telemetry | No disruption-path dependency on observability | Planned integration test |
 | F54 | A traceable operation handles traveler or document evidence | Export only outcome and hashed references | Raw reference absent; content capture forced false | Automated unit |
+| F55 | Development content flag is accidentally set in production | Force content capture off | No prompt, input, or output attributes attached | Automated unit |
+| F56 | Explicit development content tracing uses a synthetic document | Show flow instruction, input, and canonical output | `document.parse` has non-empty LangSmith inputs and outputs | Automated unit + networked LangSmith runner |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

@@ -123,6 +123,18 @@ class DocumentParsingFlow(Flow[DocumentParsingState]):
         "travel.document_bytes": len(document_bytes),
     },
     result_outcome=lambda result: str(result.get("status", "completed")),
+    content_input=lambda document_bytes, metadata, ocr_provider=None: {
+        "instruction": (
+            "Extract booked flight legs from this development itinerary PDF "
+            "and return the canonical itinerary or request human review."
+        ),
+        "document": {
+            "media_type": "application/pdf",
+            "byte_count": len(document_bytes),
+        },
+        "metadata": metadata.model_dump(mode="json"),
+    },
+    content_output=lambda result: result,
 )
 def run_document_flow(
     document_bytes: bytes,

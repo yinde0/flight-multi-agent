@@ -9,7 +9,9 @@ processors:
 
 exporters:
   otlphttp/langsmith:
-    endpoint: ${env:LANGSMITH_OTEL_ENDPOINT}
+    # This value is already the complete signal URL. Using `endpoint` would
+    # make the collector append another /v1/traces path.
+    traces_endpoint: ${env:LANGSMITH_OTEL_ENDPOINT}
     headers:
       x-api-key: ${env:LANGSMITH_API_KEY}
       Langsmith-Project: ${env:LANGSMITH_PROJECT}

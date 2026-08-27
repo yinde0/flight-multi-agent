@@ -211,6 +211,12 @@ one successful authenticated re-drive, exactly one traveler-visible delivery,
 no duplicate delivery, zero final outboxes/dead letters, and an exported OTLP
 trace batch. See [docs/vertical-slice-09.md](docs/vertical-slice-09.md).
 
+For prompt/input/output inspection during development, stack
+`compose.langsmith-development.yaml` on the LangSmith overlay and run
+`tools/run_langsmith_document_trace.py`. The switch is ignored outside the
+`development` deployment environment and should be used only with synthetic or
+redacted evidence.
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, approved notification actions, and authorized read-only searches.
