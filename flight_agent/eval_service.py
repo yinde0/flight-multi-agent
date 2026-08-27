@@ -29,6 +29,7 @@ from flight_agent.event_delivery import (
     subscribe_durable,
 )
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
+from flight_agent.telemetry import hash_reference, install_telemetry_routes, traced
 from travel_eval.policy import PolicyState, SuppressionPolicy
 
 
@@ -43,6 +44,19 @@ def load_policy() -> SuppressionPolicy:
     return SuppressionPolicy(json.loads(path.read_text(encoding="utf-8")))
 
 
+@traced(
+    "evaluation.decide",
+    service_name="eval-agent",
+    attributes=lambda candidate, store, policy: {
+        "travel.candidate_ref": hash_reference(candidate.get("candidate_id", "")),
+        "travel.trip_ref": hash_reference(candidate.get("trip_id", "")),
+    },
+    result_outcome=lambda result: (
+        "duplicate"
+        if result[4]
+        else str(result[0].get("verdict", "unknown")).lower()
+    ),
+)
 def evaluate_candidate(
     candidate: dict[str, Any],
     store: MonitoringStore,
@@ -278,6 +292,7 @@ def create_eval_app(
         lifespan=lifespan,
     )
     app.state.ready = False
+    install_telemetry_routes(app, service_name="eval-agent")
 
     @app.get("/health/live", tags=["health"])
     async def health() -> dict[str, str]:

@@ -32,6 +32,7 @@ from flight_agent.flight_search_mcp_client import (
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
 from flight_agent.notification_action_service import _now_utc, _verified_decision
 from flight_agent.notification_contracts import ConfirmedDisruptionEvent
+from flight_agent.telemetry import hash_reference, install_telemetry_routes, traced
 from travel_eval.clock import parse_timestamp
 
 
@@ -56,6 +57,18 @@ def _record(
     )
 
 
+@traced(
+    "search.action",
+    service_name="flight-search-action-service",
+    kind="tool",
+    attributes=lambda event_payload, **kwargs: {
+        "travel.decision_ref": hash_reference(
+            event_payload.get("decision_id", "")
+        ),
+        "travel.trip_ref": hash_reference(event_payload.get("trip_id", "")),
+    },
+    result_outcome=lambda result: result.status,
+)
 def process_search_event(
     event_payload: dict,
     *,
@@ -252,6 +265,7 @@ def create_flight_search_action_app(
         lifespan=lifespan,
     )
     app.state.ready = False
+    install_telemetry_routes(app, service_name="flight-search-action-service")
 
     @app.get("/health/live", tags=["health"])
     async def health() -> dict[str, str]:

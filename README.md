@@ -189,6 +189,28 @@ persisted terminal action results, and idempotency checks make redelivery produc
 one traveler-visible consequence in the tested path. See
 [docs/vertical-slice-08.md](docs/vertical-slice-08.md).
 
+## Observable operations and controlled recovery
+
+Vertical slice 09 adds privacy-safe OpenTelemetry traces, Prometheus metrics, an
+optional provisioned Grafana dashboard, and optional LangSmith export. A private
+operations service can inspect active dead letters and re-drive only their
+original persisted payload after token authentication; notification and search
+still re-check Eval authority and their idempotency records.
+
+Run the deterministic provider-outage and recovery test:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.operations-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_operations_test.py
+docker compose -f compose.yaml -f compose.test.yaml -f compose.operations-test.yaml down
+```
+
+The golden requires three exhausted action attempts, one visible dead letter,
+zero provider calls before repair, HTTP 401 without the operator credential,
+one successful authenticated re-drive, exactly one traveler-visible delivery,
+no duplicate delivery, zero final outboxes/dead letters, and an exported OTLP
+trace batch. See [docs/vertical-slice-09.md](docs/vertical-slice-09.md).
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, approved notification actions, and authorized read-only searches.

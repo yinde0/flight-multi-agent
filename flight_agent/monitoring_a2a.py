@@ -39,6 +39,7 @@ from flight_agent.monitoring_store import (
     DynamoMonitoringStateStore,
     MonitoringStore,
 )
+from flight_agent.telemetry import install_telemetry_routes
 from flight_agent.weather import NeutralWeatherGateway
 from flight_agent.weather_mcp_client import StreamableHttpWeatherMcpClient, WeatherGateway
 
@@ -220,6 +221,7 @@ def create_monitoring_agent_app(
         lifespan=lifespan,
     )
     app.state.ready = False
+    install_telemetry_routes(app, service_name="monitor-agent")
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),

@@ -1,0 +1,58 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "travel-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum(travel_dead_letters_active)", "refId": "A"}],
+      "title": "Active dead letters",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "travel-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum(travel_outbox_pending)", "refId": "A"}],
+      "title": "Pending outbox records",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "travel-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "targets": [{"expr": "sum(travel_jetstream_consumer_pending)", "refId": "A"}],
+      "title": "JetStream pending",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "travel-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(travel_operation_executions_total[5m]))",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent and action outcomes",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": ["travel", "operations", "jetstream"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "Travel disruption operations",
+  "uid": "travel-disruption-ops",
+  "version": 1
+}

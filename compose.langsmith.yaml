@@ -1,0 +1,76 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    command:
+      - --config=/etc/otelcol/langsmith.yaml
+    volumes:
+      - ./otel-collector-langsmith.yaml:/etc/otelcol/langsmith.yaml:ro
+    environment:
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:?LANGSMITH_API_KEY is required}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-flight-multi-agent}
+      # LANGSMITH_ENDPOINT is the standard account/region base URL. The
+      # full override remains available for unusual self-hosted routing.
+      LANGSMITH_OTEL_ENDPOINT: ${LANGSMITH_OTEL_ENDPOINT:-${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}/otel/v1/traces}
+    expose:
+      - "4318"
+    networks:
+      - travel-internal
+      - observability-egress
+
+  document-agent:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      CREWAI_OTEL_ENABLED: "true"
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  monitor-agent:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  eval-agent:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  notification-action-service:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  flight-search-action-service:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  operations-service:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+networks:
+  observability-egress:

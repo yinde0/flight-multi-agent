@@ -1,0 +1,115 @@
+services:
+  flight-status-mcp:
+    environment:
+      FLIGHT_STATUS_PROVIDER: replay
+      FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_06_flight_timeline.json
+
+  weather-mcp:
+    environment:
+      WEATHER_PROVIDER: replay
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_06_weather_timeline.json
+
+  flight-search-mcp:
+    environment:
+      FLIGHT_SEARCH_PROVIDER: replay
+      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_06_options.json
+
+  notification-mcp:
+    environment:
+      NOTIFICATION_FAILURE_MODE: "true"
+      NOTIFICATION_CHAOS_CONTROL_ENABLED: "true"
+      RELIABILITY_AUDIT_ENABLED: "true"
+      OPS_API_TOKEN: slice09-test-token
+    ports:
+      - "18007:8007"
+    networks:
+      - notification-internal
+      - operations-audit
+
+  eval-agent:
+    environment:
+      RELIABILITY_AUDIT_ENABLED: "true"
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-sink-stub:4318/v1/traces
+      OTEL_EXPORT_TIMEOUT_SECONDS: "1"
+      TRACELOOP_TRACE_CONTENT: "false"
+    ports:
+      - "18005:8005"
+    networks:
+      - travel-internal
+      - operations-audit
+
+  monitor-agent:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-sink-stub:4318/v1/traces
+      OTEL_EXPORT_TIMEOUT_SECONDS: "1"
+      TRACELOOP_TRACE_CONTENT: "false"
+
+  notification-action-service:
+    environment:
+      EVENT_ACK_WAIT_SECONDS: "5"
+      EVENT_MAX_DELIVERIES: "3"
+      EVENT_RETRY_DELAY_SECONDS: "0.5"
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-sink-stub:4318/v1/traces
+      OTEL_EXPORT_TIMEOUT_SECONDS: "1"
+      TRACELOOP_TRACE_CONTENT: "false"
+    ports:
+      - "18008:8008"
+    networks:
+      - travel-internal
+      - notification-internal
+      - operations-audit
+
+  flight-search-action-service:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-sink-stub:4318/v1/traces
+      OTEL_EXPORT_TIMEOUT_SECONDS: "1"
+      TRACELOOP_TRACE_CONTENT: "false"
+
+  operations-service:
+    environment:
+      OPS_API_TOKEN: slice09-test-token
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-sink-stub:4318/v1/traces
+      OTEL_EXPORT_TIMEOUT_SECONDS: "1"
+      TRACELOOP_TRACE_CONTENT: "false"
+    ports:
+      - "18012:8012"
+    depends_on:
+      otel-sink-stub:
+        condition: service_healthy
+    networks:
+      - travel-internal
+      - operations-audit
+
+  otel-sink-stub:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.otel_sink_stub:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4318"
+    ports:
+      - "14318:4318"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4318/health/live', timeout=2)"
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+    networks:
+      - travel-internal
+      - operations-audit
+
+networks:
+  operations-audit:

@@ -31,6 +31,7 @@ from flight_agent.ocr import (
     OcrProvider,
 )
 from flight_agent.parser import extract_pdf_text, parse_extracted_text, review_outcome
+from flight_agent.telemetry import hash_reference, traced
 
 
 class DocumentParsingState(BaseModel):
@@ -114,6 +115,15 @@ class DocumentParsingFlow(Flow[DocumentParsingState]):
         return self.state.outcome
 
 
+@traced(
+    "document.parse",
+    service_name="document-agent",
+    attributes=lambda document_bytes, metadata, ocr_provider=None: {
+        "travel.trip_ref": hash_reference(metadata.trip_id),
+        "travel.document_bytes": len(document_bytes),
+    },
+    result_outcome=lambda result: str(result.get("status", "completed")),
+)
 def run_document_flow(
     document_bytes: bytes,
     metadata: DocumentMetadata,

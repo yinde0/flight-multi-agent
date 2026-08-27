@@ -27,6 +27,7 @@ from flight_agent.flight_status_mcp_client import (
 from flight_agent.monitoring_contracts import MonitoringPollOutcome, MonitoringPollRequest
 from flight_agent.monitoring_events import CandidatePublisher, NatsCandidatePublisher
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
+from flight_agent.telemetry import hash_reference, traced
 from flight_agent.weather import NeutralWeatherGateway
 from flight_agent.weather_mcp_client import StreamableHttpWeatherMcpClient, WeatherGateway
 from travel_eval.clock import parse_timestamp
@@ -434,6 +435,15 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
         return self.state.outcome
 
 
+@traced(
+    "monitoring.poll",
+    service_name="monitor-agent",
+    attributes=lambda request, **kwargs: {
+        "travel.trip_ref": hash_reference(request.trip_id),
+        "travel.leg_ref": hash_reference(request.leg_id),
+    },
+    result_outcome=lambda result: str(result.get("status", "unknown")),
+)
 def run_monitoring_flow(
     request: MonitoringPollRequest,
     *,

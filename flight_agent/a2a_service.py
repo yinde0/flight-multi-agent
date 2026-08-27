@@ -28,6 +28,7 @@ from fastapi import FastAPI
 from flight_agent.contracts import DocumentMetadata
 from flight_agent.flow import run_document_flow
 from flight_agent.ocr import OcrProvider
+from flight_agent.telemetry import install_telemetry_routes
 
 
 def _request_parts(context: RequestContext) -> tuple[bytes, DocumentMetadata]:
@@ -134,6 +135,7 @@ def create_document_agent_app(
         agent_card=card,
     )
     app = FastAPI(title="Travel Document Parsing Agent", version="0.1.0")
+    install_telemetry_routes(app, service_name="document-agent")
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),

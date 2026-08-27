@@ -49,6 +49,12 @@
 | F45 | NATS is down during candidate publication | Retain atomically stored candidate outbox and retry | One pending outbox during outage; zero after recovery | Automated: vertical-08 |
 | F46 | NATS restarts after publication but before Eval starts | Recover candidate from file-backed stream | Eval later commits one approved decision | Automated: vertical-08 |
 | F47 | Confirmed event is duplicated and action services restart | Reuse terminal action records | Provider call counts remain unchanged | Automated: vertical-08 |
-| F48 | A valid event exhausts its delivery budget | Quarantine and terminate it | One consumer-specific dead letter; no infinite retry | Automated unit: event delivery |
+| F48 | A valid event exhausts its delivery budget | Quarantine and terminate it | One consumer-specific dead letter; no infinite retry | Automated unit + vertical-09 |
+| F49 | Notification provider remains down through the delivery budget | Quarantine without claiming a provider delivery | Three action failures; one active dead letter; zero provider calls | Automated: vertical-09 |
+| F50 | Re-drive request has no valid operator credential | Reject before reading or publishing evidence | HTTP 401; dead letter remains active | Automated: vertical-09 |
+| F51 | Provider recovers and an operator re-drives stored evidence | Re-validate and publish the authoritative event | One delivered notification; active dead letter clears | Automated: vertical-09 |
+| F52 | The same dead letter is re-driven again | Return its terminal re-drive state | `already_redriven`; provider count unchanged | Automated unit + vertical-09 |
+| F53 | Trace collector is unavailable | Continue business processing; batch exporter may drop telemetry | No disruption-path dependency on observability | Planned integration test |
+| F54 | A traceable operation handles traveler or document evidence | Export only outcome and hashed references | Raw reference absent; content capture forced false | Automated unit |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

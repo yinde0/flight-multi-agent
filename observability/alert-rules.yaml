@@ -1,0 +1,26 @@
+groups:
+  - name: travel-delivery-health
+    rules:
+      - alert: TravelDeadLettersActive
+        expr: travel_dead_letters_active > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Travel actions are in the dead-letter store
+
+      - alert: TravelOutboxStuck
+        expr: travel_outbox_pending > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Travel events have remained unpublished
+
+      - alert: TravelConsumerBacklog
+        expr: travel_jetstream_consumer_pending > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: A durable travel-event consumer is behind

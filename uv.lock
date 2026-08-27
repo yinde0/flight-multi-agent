@@ -2328,6 +2328,36 @@ wheels = [
 ]
 
 [[package]]
+name = "opentelemetry-instrumentation"
+version = "0.63b1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "packaging" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/6d/4de72d97ff54db1ed270c7a59c9b904b917c0ac7af429c086c388b824ddb/opentelemetry_instrumentation-0.63b1.tar.gz", hash = "sha256:32368d6ae52c8de20aa790a6ad86b10a76f09956092337ae37d675773990e541", size = 41081, upload-time = "2026-05-21T16:36:14.206Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/a1/9314e621c143e4d82a5bf7a43c2ff7a745d31023506336857607c8c543cc/opentelemetry_instrumentation-0.63b1-py3-none-any.whl", hash = "sha256:f1986716d52cc316ea5f60189098726a9071d8ecc0eee96c9ed110be08bade9c", size = 35577, upload-time = "2026-05-21T16:34:56.818Z" },
+]
+
+[[package]]
+name = "opentelemetry-instrumentation-crewai"
+version = "0.62.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "opentelemetry-semantic-conventions-ai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/83/ba/d06fc2140b56ecda08c6cadc3fccea0da8ce5088953967432af2d5affd1c/opentelemetry_instrumentation_crewai-0.62.3.tar.gz", hash = "sha256:bc2530274a0315764aba9cb3c32a63c9abe1a3ba08265a7dc6708049a29e544b", size = 292296, upload-time = "2026-08-10T08:51:09.095Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/a5/e7aff023549ab157c2d97c52095630b6c36e2ba74faf36ee5da98691909f/opentelemetry_instrumentation_crewai-0.62.3-py3-none-any.whl", hash = "sha256:7106e484fe6728f084288a8a89ca7e8b11af8c087b0f73ecdca5ba99a25cd307", size = 8696, upload-time = "2026-08-10T08:50:29.616Z" },
+]
+
+[[package]]
 name = "opentelemetry-proto"
 version = "1.42.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2364,6 +2394,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/93/99/4d7dd6df64795951413ce6e815f8cf1eb191daf7196ae86574589643d5f3/opentelemetry_semantic_conventions-0.63b1.tar.gz", hash = "sha256:3daf963611334b365e98a57438183eb012d3bfb40b2d931a9af613476b8701a9", size = 148340, upload-time = "2026-05-21T16:33:05.455Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/7a/7fe66f5f3682b1dd47d88cc4e11f1c6c0966b737de2d16671146e23c39a5/opentelemetry_semantic_conventions-0.63b1-py3-none-any.whl", hash = "sha256:dfe5ef4dee82586b746f522b818ceb298d00b3d59f660042bd79404bff8d0682", size = 203713, upload-time = "2026-05-21T16:32:47.016Z" },
+]
+
+[[package]]
+name = "opentelemetry-semantic-conventions-ai"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-sdk" },
+    { name = "opentelemetry-semantic-conventions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/24/02/10aeacc37a38a3a8fa16ff67bec1ae3bf882539f6f9efb0f70acf802ca2d/opentelemetry_semantic_conventions_ai-0.5.1.tar.gz", hash = "sha256:153906200d8c1d2f8e09bd78dbef526916023de85ac3dab35912bfafb69ff04c", size = 26533, upload-time = "2026-03-26T14:20:38.73Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/22/41fb05f1dc5fda2c468e05a41814c20859016c85117b66c8a257cae814f6/opentelemetry_semantic_conventions_ai-0.5.1-py3-none-any.whl", hash = "sha256:25aeb22bd261543b4898a73824026d96770e5351209c7d07a0b1314762b1f6e4", size = 11250, upload-time = "2026-03-26T14:20:37.108Z" },
 ]
 
 [[package]]
@@ -3899,6 +3942,9 @@ app = [
     { name = "httpx" },
     { name = "mcp" },
     { name = "nats-py" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-instrumentation-crewai" },
+    { name = "opentelemetry-sdk" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pypdf" },
     { name = "python-multipart" },
@@ -3928,6 +3974,9 @@ requires-dist = [
     { name = "jsonschema", marker = "extra == 'validation'", specifier = ">=4.23,<5" },
     { name = "mcp", marker = "extra == 'app'", specifier = ">=1.28.1,<2" },
     { name = "nats-py", marker = "extra == 'app'", specifier = ">=2.10,<3" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'app'", specifier = ">=1.42,<2" },
+    { name = "opentelemetry-instrumentation-crewai", marker = "extra == 'app'", specifier = ">=0.62.1,<0.63" },
+    { name = "opentelemetry-sdk", marker = "extra == 'app'", specifier = ">=1.42,<2" },
     { name = "pdfplumber", marker = "extra == 'pdf-fixtures'", specifier = ">=0.11,<1" },
     { name = "pillow", marker = "extra == 'pdf-fixtures'", specifier = ">=10,<12" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'app'", specifier = ">=3.2,<4" },

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import secrets
+import threading
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -15,6 +17,25 @@ from flight_agent.notification_contracts import (
 
 
 provider = RecordingNotificationProvider()
+
+
+class NotificationFailureGate:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._enabled = (
+            os.getenv("NOTIFICATION_FAILURE_MODE", "false").lower() == "true"
+        )
+
+    def enabled(self) -> bool:
+        with self._lock:
+            return self._enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        with self._lock:
+            self._enabled = enabled
+
+
+failure_gate = NotificationFailureGate()
 mcp = FastMCP(
     "Travel Notification",
     instructions=(
@@ -44,6 +65,8 @@ mcp = FastMCP(
     structured_output=True,
 )
 def send_notification(command: NotificationCommand) -> NotificationReceipt:
+    if failure_gate.enabled():
+        raise RuntimeError("Injected notification capability outage")
     return provider.send(command)
 
 
@@ -58,7 +81,30 @@ async def reliability_audit(request: Request) -> JSONResponse:
     del request
     if os.getenv("RELIABILITY_AUDIT_ENABLED", "false").lower() != "true":
         return JSONResponse({"detail": "Not found"}, status_code=404)
-    return JSONResponse(provider.audit())
+    return JSONResponse(
+        {**provider.audit(), "failure_mode_enabled": failure_gate.enabled()}
+    )
+
+
+@mcp.custom_route("/v1/operations/failure-mode", methods=["POST"])
+async def notification_failure_mode(request: Request) -> JSONResponse:
+    if (
+        os.getenv("NOTIFICATION_CHAOS_CONTROL_ENABLED", "false").lower()
+        != "true"
+    ):
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    expected = os.getenv("OPS_API_TOKEN", "")
+    supplied = request.headers.get("x-ops-token", "")
+    if not expected or not supplied or not secrets.compare_digest(expected, supplied):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    payload = await request.json()
+    enabled = payload.get("enabled") if isinstance(payload, dict) else None
+    if not isinstance(enabled, bool):
+        return JSONResponse(
+            {"detail": "enabled must be a boolean"}, status_code=422
+        )
+    failure_gate.set_enabled(enabled)
+    return JSONResponse({"failure_mode_enabled": failure_gate.enabled()})
 
 
 app = mcp.streamable_http_app()

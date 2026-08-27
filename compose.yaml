@@ -201,6 +201,50 @@ services:
     networks:
       - travel-internal
 
+  operations-service:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.operations_service:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8012"
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: eu-west-2
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MONITORING_TABLE_NAME: travel-monitoring-state
+      NATS_URL: nats://nats:4222
+      # No fallback credential: operator endpoints remain disabled until an
+      # explicit secret is injected. Health and Prometheus metrics stay public
+      # only on the private Docker network.
+      OPS_API_TOKEN: ${OPS_API_TOKEN:-}
+      OTEL_TRACING_ENABLED: ${OTEL_TRACING_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}
+      TRACELOOP_TRACE_CONTENT: "false"
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+      nats:
+        condition: service_healthy
+    expose:
+      - "8012"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8012/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+
   notification-mcp:
     build:
       context: .

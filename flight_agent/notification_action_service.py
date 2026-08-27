@@ -32,6 +32,7 @@ from flight_agent.notification_mcp_client import (
     NotificationGateway,
     StreamableHttpNotificationMcpClient,
 )
+from flight_agent.telemetry import hash_reference, install_telemetry_routes, traced
 
 
 def _now_utc() -> str:
@@ -77,6 +78,18 @@ def _verified_decision(
     return decision
 
 
+@traced(
+    "notification.action",
+    service_name="notification-action-service",
+    kind="tool",
+    attributes=lambda event_payload, **kwargs: {
+        "travel.decision_ref": hash_reference(
+            event_payload.get("decision_id", "")
+        ),
+        "travel.trip_ref": hash_reference(event_payload.get("trip_id", "")),
+    },
+    result_outcome=lambda result: result.status,
+)
 def process_confirmed_event(
     event_payload: dict[str, Any],
     *,
@@ -256,6 +269,7 @@ def create_notification_action_app(
         lifespan=lifespan,
     )
     app.state.ready = False
+    install_telemetry_routes(app, service_name="notification-action-service")
 
     @app.get("/health/live", tags=["health"])
     async def health() -> dict[str, str]:

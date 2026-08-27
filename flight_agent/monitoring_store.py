@@ -109,6 +109,42 @@ class MonitoringStore(Protocol):
 
     def dead_letter_count(self, consumer: str) -> int: ...
 
+    def list_dead_letters(
+        self, consumer: str, *, active_only: bool = True
+    ) -> list[dict[str, Any]]: ...
+
+    def get_dead_letter(
+        self, consumer: str, event_id: str
+    ) -> dict[str, Any] | None: ...
+
+    def claim_redrive(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        request_id: str,
+        operator_ref: str,
+        reason: str,
+    ) -> tuple[bool, dict[str, Any]]: ...
+
+    def finish_redrive(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        request_id: str,
+        status: str,
+        error_code: str | None = None,
+    ) -> None: ...
+
+    def mark_dead_letter_redriven(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        request_id: str,
+    ) -> None: ...
+
 
 class DynamoMonitoringStateStore:
     """DynamoDB adapter for last-known state, decisions, and policy memory."""
@@ -505,6 +541,7 @@ class DynamoMonitoringStateStore:
                 ),
                 "error_code": error_code,
                 "attempts": attempts,
+                "status": "active",
                 "recorded_at": datetime.now(timezone.utc)
                 .isoformat(timespec="seconds")
                 .replace("+00:00", "Z"),
@@ -512,9 +549,155 @@ class DynamoMonitoringStateStore:
         )
 
     def dead_letter_count(self, consumer: str) -> int:
-        response = self._table.query(
-            KeyConditionExpression=Key("pk").eq(f"DEADLETTER#{consumer}"),
-            Select="COUNT",
-            ConsistentRead=True,
+        return len(self.list_dead_letters(consumer, active_only=True))
+
+    def list_dead_letters(
+        self, consumer: str, *, active_only: bool = True
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        request: dict[str, Any] = {
+            "KeyConditionExpression": Key("pk").eq(f"DEADLETTER#{consumer}"),
+            "ConsistentRead": True,
+        }
+        while True:
+            response = self._table.query(**request)
+            items.extend(response.get("Items", []))
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            request["ExclusiveStartKey"] = last_key
+        records: list[dict[str, Any]] = []
+        for item in items:
+            if active_only and item.get("status", "active") != "active":
+                continue
+            payload = self._payload(item) or {}
+            records.append(
+                {
+                    "consumer": consumer,
+                    "event_id": str(item["sk"]).removeprefix("EVENT#"),
+                    "payload": payload,
+                    "error_code": item.get("error_code"),
+                    "attempts": int(item.get("attempts", 0)),
+                    "status": item.get("status", "active"),
+                    "recorded_at": item.get("recorded_at"),
+                    "redrive_request_id": item.get("redrive_request_id"),
+                    "redriven_at": item.get("redriven_at"),
+                }
+            )
+        return records
+
+    def get_dead_letter(
+        self, consumer: str, event_id: str
+    ) -> dict[str, Any] | None:
+        item = self._get(f"DEADLETTER#{consumer}", f"EVENT#{event_id}")
+        if item is None:
+            return None
+        payload = self._payload(item) or {}
+        return {
+            "consumer": consumer,
+            "event_id": event_id,
+            "payload": payload,
+            "error_code": item.get("error_code"),
+            "attempts": int(item.get("attempts", 0)),
+            "status": item.get("status", "active"),
+            "recorded_at": item.get("recorded_at"),
+            "redrive_request_id": item.get("redrive_request_id"),
+            "redriven_at": item.get("redriven_at"),
+        }
+
+    @staticmethod
+    def _redrive_partition(consumer: str, event_id: str) -> str:
+        return f"REDRIVE#{consumer}#{event_id}"
+
+    def claim_redrive(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        request_id: str,
+        operator_ref: str,
+        reason: str,
+    ) -> tuple[bool, dict[str, Any]]:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+            "+00:00", "Z"
         )
-        return int(response.get("Count", 0))
+        item = {
+            "pk": self._redrive_partition(consumer, event_id),
+            "sk": f"REQUEST#{request_id}",
+            "consumer": consumer,
+            "event_id": event_id,
+            "request_id": request_id,
+            "operator_ref": operator_ref,
+            "reason": reason,
+            "status": "publishing",
+            "requested_at": now,
+        }
+        try:
+            self._table.put_item(
+                Item=item,
+                ConditionExpression="attribute_not_exists(pk)",
+            )
+            return True, item
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != (
+                "ConditionalCheckFailedException"
+            ):
+                raise
+            existing = self._get(item["pk"], item["sk"]) or item
+            return False, existing
+
+    def finish_redrive(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        request_id: str,
+        status: str,
+        error_code: str | None = None,
+    ) -> None:
+        values: dict[str, Any] = {
+            ":status": status,
+            ":finished": datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z"),
+        }
+        expression = "SET #status = :status, finished_at = :finished"
+        if error_code:
+            values[":error"] = error_code
+            expression += ", error_code = :error"
+        self._table.update_item(
+            Key={
+                "pk": self._redrive_partition(consumer, event_id),
+                "sk": f"REQUEST#{request_id}",
+            },
+            UpdateExpression=expression,
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues=values,
+        )
+
+    def mark_dead_letter_redriven(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        request_id: str,
+    ) -> None:
+        self._table.update_item(
+            Key={
+                "pk": f"DEADLETTER#{consumer}",
+                "sk": f"EVENT#{event_id}",
+            },
+            UpdateExpression=(
+                "SET #status = :status, redrive_request_id = :request, "
+                "redriven_at = :redriven"
+            ),
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "redrive_published",
+                ":request": request_id,
+                ":redriven": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+            },
+            ConditionExpression="attribute_exists(pk)",
+        )

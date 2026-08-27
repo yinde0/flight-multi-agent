@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Golden invariants for observable dead-letter recovery without duplicate traveler effects.",
+  "retry_count": 3,
+  "active_dead_letters_before_recovery": 1,
+  "notification_provider_calls_before_recovery": 0,
+  "failed_notification_operations": 3,
+  "unauthorized_redrive_status": 401,
+  "redrive_status": "published",
+  "duplicate_redrive_status": "already_redriven",
+  "notification_status": "delivered",
+  "search_status": "completed",
+  "notification_provider_call_delta": 1,
+  "notification_unique_delivery_delta": 1,
+  "active_dead_letters_after_recovery": 0,
+  "outbox_pending_total": 0,
+  "otel_trace_exported": true
+}

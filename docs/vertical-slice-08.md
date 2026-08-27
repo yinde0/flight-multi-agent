@@ -132,7 +132,8 @@ interval are environment-configurable; `.env.example` lists their names.
 - Exactly-once provider side effects ultimately require the real notification
   and flight-search providers to honor an idempotency key. The local recording
   providers prove the application behavior, not a third party's guarantee.
-- Dead letters are queryable audit records, but an authenticated operations UI,
-  alarm, retention policy, and controlled re-drive workflow are not yet built.
+- Slice 09 now provides authenticated inspection, alerts, and controlled
+  re-drive. A browser-based operator UI and explicit dead-letter retention
+  policy are still not built.
 - This slice makes the disruption path durable; it does not make S3 and
   Postgres trip activation one cross-store transaction.
