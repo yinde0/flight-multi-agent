@@ -2,6 +2,27 @@
 
 This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. Its executable vertical paths now parse native-text and image-only PDFs, then statefully monitor flight-status changes and evaluate whether they are significant.
 
+## Traveler frontend
+
+The customer-facing Streamlit app lets a traveler upload a PDF ticket, activate
+monitoring, and see the parsed itinerary and current trip state. It is available
+at `http://localhost:8501` when the normal Docker stack is running:
+
+```powershell
+docker compose up -d --build --wait
+```
+
+Run its focused expected-output check with:
+
+```powershell
+uv sync --extra app --extra test --extra ui
+.\.venv\Scripts\python.exe tools\run_vertical_frontend_test.py
+```
+
+The frontend only calls `travel-api`; it does not receive provider or storage
+credentials. See [docs/vertical-slice-12.md](docs/vertical-slice-12.md) for the
+customer journey, test contract, and deliberate limitations.
+
 The package defines the contracts those components must satisfy and keeps
 deterministic scenario replay as the acceptance boundary for every application
 vertical slice.

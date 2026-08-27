@@ -1,0 +1,47 @@
+# Travel Watch theme, adapted from Streamlit's Fluent template.
+[theme]
+base = "light"
+primaryColor = "#007C78"
+backgroundColor = "#FBFDFC"
+secondaryBackgroundColor = "#EDF6F5"
+codeBackgroundColor = "#E7F0EF"
+textColor = "#17363C"
+linkColor = "#006A67"
+borderColor = "#CDDCD9"
+showWidgetBorder = true
+showSidebarBorder = false
+baseRadius = "12px"
+buttonRadius = "full"
+font = "sans-serif"
+codeFont = "monospace"
+baseFontSize = 15
+baseFontWeight = 400
+headingFontSizes = ["34px", "27px", "22px", "18px", "16px", "14px"]
+headingFontWeights = [700, 700, 650, 650, 600, 600]
+linkUnderline = false
+chartCategoricalColors = ["#007C78", "#2F6D8B", "#D9822B", "#7A5BA7", "#D14B64", "#6B7C80"]
+blueColor = "#2F6D8B"
+greenColor = "#267A56"
+redColor = "#B63A4B"
+yellowColor = "#B8770E"
+orangeColor = "#C96828"
+violetColor = "#7A5BA7"
+grayColor = "#6B7C80"
+
+[theme.sidebar]
+backgroundColor = "#113D43"
+secondaryBackgroundColor = "#1C4C52"
+codeBackgroundColor = "#26575D"
+textColor = "#F4FAF9"
+borderColor = "#37666B"
+primaryColor = "#76D7CF"
+
+[server]
+headless = true
+maxUploadSize = 5
+enableXsrfProtection = true
+enableCORS = true
+runOnSave = false
+
+[browser]
+gatherUsageStats = false

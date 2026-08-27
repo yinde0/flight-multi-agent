@@ -573,6 +573,33 @@ services:
       - travel-internal
       - travel-edge
 
+  traveler-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    environment:
+      TRAVEL_API_URL: http://travel-api:8000
+      TRAVEL_UI_API_TIMEOUT_SECONDS: ${TRAVEL_UI_API_TIMEOUT_SECONDS:-150}
+      NO_PROXY: travel-api,localhost,127.0.0.1
+    depends_on:
+      travel-api:
+        condition: service_healthy
+    ports:
+      - "${TRAVEL_UI_PORT:-8501}:8501"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - travel-internal
+      - travel-edge
+
 networks:
   travel-internal:
     internal: true
