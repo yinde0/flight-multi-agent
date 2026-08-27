@@ -160,6 +160,35 @@ object storage, two persisted polls across the restart, zero work on duplicate
 ticks, and exactly one notification plus one read-only rebooking search. See
 [docs/vertical-slice-07.md](docs/vertical-slice-07.md).
 
+## Durable event delivery and outage recovery
+
+Vertical slice 08 replaces the Core NATS event path with a file-backed
+JetStream stream and three explicit-ACK durable consumers. DynamoDB
+transactions store each candidate or approved confirmation with an outbox
+record before publication. A publish acknowledgement removes the outbox;
+temporary broker failure leaves it available for retry.
+
+```text
+Dynamo candidate + outbox -> JetStream -> durable Eval consumer
+Dynamo decision + outbox  -> JetStream -> durable notification consumer
+                                      `-> durable search consumer
+```
+
+Run the staged outage golden, which stops NATS and the consumers, restarts NATS
+twice, forces a confirmed-event redelivery, and checks actual provider call
+counts:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.reliability-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_reliability_test.py
+docker compose -f compose.yaml -f compose.test.yaml -f compose.reliability-test.yaml down
+```
+
+The transport remains correctly described as at-least-once. Stable event IDs,
+persisted terminal action results, and idempotency checks make redelivery produce
+one traveler-visible consequence in the tested path. See
+[docs/vertical-slice-08.md](docs/vertical-slice-08.md).
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, approved notification actions, and authorized read-only searches.
@@ -226,8 +255,9 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 ## Intended implementation boundary
 
 The flight-status, weather, notification, and read-only flight-search MCP tools,
-NATS event path, DynamoDB live-state adapter, Monitoring Agent, Eval Agent, and
-post-Eval action services now exist. Trip activation uses an RDS-compatible
+durable JetStream event path, transactional DynamoDB outboxes and live-state
+adapter, Monitoring Agent, Eval Agent, and post-Eval action services now exist.
+Trip activation uses an RDS-compatible
 Postgres adapter and an S3-compatible document adapter; Docker supplies local
 Postgres and MinIO instances. The capability MCPs are reachable only from their
 post-evaluation action services, and `NOTIFY_AND_SEARCH` is never interpreted as

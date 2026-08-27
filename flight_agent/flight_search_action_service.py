@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 
 from contextlib import asynccontextmanager
@@ -9,6 +8,16 @@ from datetime import timedelta
 
 from fastapi import FastAPI, HTTPException
 
+from flight_agent.event_delivery import (
+    DISRUPTION_CONFIRMED_SUBJECT,
+    SEARCH_CONSUMER,
+    decode_envelope,
+    ensure_event_stream,
+    fallback_event_id,
+    quarantine_message,
+    retry_or_quarantine,
+    subscribe_durable,
+)
 from flight_agent.eval_service import connect_nats
 from flight_agent.flight_search import rank_feasible_options
 from flight_agent.flight_search_contracts import (
@@ -20,7 +29,6 @@ from flight_agent.flight_search_mcp_client import (
     FlightSearchGateway,
     StreamableHttpFlightSearchMcpClient,
 )
-from flight_agent.monitoring_events import DISRUPTION_CONFIRMED_SUBJECT
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
 from flight_agent.notification_action_service import _now_utc, _verified_decision
 from flight_agent.notification_contracts import ConfirmedDisruptionEvent
@@ -162,25 +170,74 @@ def create_flight_search_action_app(
         connection = await connect_nats(
             os.getenv("NATS_URL", "nats://127.0.0.1:4222")
         )
+        jetstream = connection.jetstream()
+        await ensure_event_stream(jetstream)
 
         async def handle_confirmed(message) -> None:
+            envelope = None
             try:
-                event = json.loads(message.data.decode("utf-8"))
-                await asyncio.to_thread(
+                envelope = decode_envelope(
+                    message, expected_type="disruption_confirmed"
+                )
+                record = await asyncio.to_thread(
                     process_search_event,
-                    event,
+                    envelope.payload,
                     store=resolved_store,
                     search_gateway=resolved_gateway,
                 )
+                if record.status in {"completed", "no_options"}:
+                    await message.ack_sync(timeout=3)
+                elif (
+                    record.status == "rejected"
+                    and record.error_code == "SEARCH_NOT_AUTHORIZED"
+                ):
+                    # A NOTIFY event is valid for notification but intentionally
+                    # irrelevant to the search consumer.
+                    await message.ack_sync(timeout=3)
+                elif record.status == "rejected":
+                    await quarantine_message(
+                        message,
+                        store=resolved_store,
+                        consumer=SEARCH_CONSUMER,
+                        event_id=envelope.event_id,
+                        payload=envelope.payload,
+                        error_code=record.error_code or "SEARCH_EVENT_REJECTED",
+                    )
+                else:
+                    await retry_or_quarantine(
+                        message,
+                        store=resolved_store,
+                        consumer=SEARCH_CONSUMER,
+                        event_id=envelope.event_id,
+                        payload=envelope.payload,
+                        error_code=record.error_code or "SEARCH_ACTION_FAILED",
+                    )
             except Exception:
-                return
+                if envelope is None:
+                    await quarantine_message(
+                        message,
+                        store=resolved_store,
+                        consumer=SEARCH_CONSUMER,
+                        event_id=fallback_event_id(message),
+                        payload={},
+                        error_code="CONFIRMED_EVENT_INVALID",
+                    )
+                else:
+                    await retry_or_quarantine(
+                        message,
+                        store=resolved_store,
+                        consumer=SEARCH_CONSUMER,
+                        event_id=envelope.event_id,
+                        payload=envelope.payload,
+                        error_code="SEARCH_ACTION_FAILED",
+                    )
 
-        subscription = await connection.subscribe(
-            DISRUPTION_CONFIRMED_SUBJECT,
-            queue="travel-flight-search-action-v1",
-            cb=handle_confirmed,
+        subscription = await subscribe_durable(
+            jetstream,
+            subject=DISRUPTION_CONFIRMED_SUBJECT,
+            durable_name=SEARCH_CONSUMER,
+            callback=handle_confirmed,
         )
-        await connection.flush(timeout=3)
         app.state.ready = True
         try:
             yield

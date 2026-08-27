@@ -299,8 +299,19 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
         }
 
         try:
-            self._store.put_candidate(candidate)
+            durable_writer = getattr(
+                self._store, "put_candidate_with_outbox", None
+            )
+            if callable(durable_writer):
+                durable_writer(candidate)
+            else:
+                self._store.put_candidate(candidate)
             self._publisher.publish_candidate(candidate)
+            outbox_deleter = getattr(self._store, "delete_outbox", None)
+            if callable(outbox_deleter):
+                outbox_deleter(
+                    "disruption_candidate", str(candidate["candidate_id"])
+                )
         except Exception:
             return self._set_outcome(
                 MonitoringPollOutcome(

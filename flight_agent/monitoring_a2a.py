@@ -27,6 +27,7 @@ from a2a.types import (
 )
 from fastapi import FastAPI, HTTPException
 
+from flight_agent.event_delivery import publish_pending_outbox
 from flight_agent.flight_status_mcp_client import (
     FlightStatusGateway,
     StreamableHttpFlightStatusMcpClient,
@@ -171,11 +172,36 @@ def create_monitoring_agent_app(
     async def lifespan(app: FastAPI):
         if isinstance(resolved_store, DynamoMonitoringStateStore):
             await asyncio.to_thread(resolved_store.ensure_table)
+        stop = asyncio.Event()
+
+        async def drain_candidate_outbox() -> None:
+            interval = max(
+                0.25, float(os.getenv("OUTBOX_RETRY_INTERVAL_SECONDS", "2"))
+            )
+            publish_record = getattr(resolved_publisher, "publish_record", None)
+            while not stop.is_set():
+                if callable(publish_record):
+                    try:
+                        await publish_pending_outbox(
+                            store=resolved_store,
+                            event_type="disruption_candidate",
+                            publish=publish_record,
+                        )
+                    except Exception:
+                        pass
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=interval)
+                except TimeoutError:
+                    continue
+
+        outbox_task = asyncio.create_task(drain_candidate_outbox())
         app.state.ready = True
         try:
             yield
         finally:
             app.state.ready = False
+            stop.set()
+            await outbox_task
 
     card = build_monitoring_agent_card(resolved_url)
     handler = DefaultRequestHandler(
@@ -208,6 +234,18 @@ def create_monitoring_agent_app(
         if not app.state.ready:
             raise HTTPException(status_code=503, detail="Monitoring Agent is starting")
         return {"status": "ok"}
+
+    @app.get("/v1/reliability/outbox", tags=["test-control"])
+    async def outbox_status() -> dict[str, int]:
+        if os.getenv("RELIABILITY_AUDIT_ENABLED", "false").lower() != "true":
+            raise HTTPException(status_code=404, detail="Reliability audit is disabled")
+        counter = getattr(resolved_store, "outbox_count", None)
+        pending = (
+            await asyncio.to_thread(counter, "disruption_candidate")
+            if callable(counter)
+            else 0
+        )
+        return {"candidate_outbox_pending": int(pending)}
 
     return app
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
 
@@ -11,8 +10,17 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
+from flight_agent.event_delivery import (
+    DISRUPTION_CONFIRMED_SUBJECT,
+    NOTIFICATION_CONSUMER,
+    decode_envelope,
+    ensure_event_stream,
+    fallback_event_id,
+    quarantine_message,
+    retry_or_quarantine,
+    subscribe_durable,
+)
 from flight_agent.eval_service import connect_nats
-from flight_agent.monitoring_events import DISRUPTION_CONFIRMED_SUBJECT
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
 from flight_agent.notification_contracts import (
     ConfirmedDisruptionEvent,
@@ -171,26 +179,69 @@ def create_notification_action_app(
         connection = await connect_nats(
             os.getenv("NATS_URL", "nats://127.0.0.1:4222")
         )
+        jetstream = connection.jetstream()
+        await ensure_event_stream(jetstream)
 
         async def handle_confirmed(message) -> None:
+            envelope = None
             try:
-                event = json.loads(message.data.decode("utf-8"))
-                await asyncio.to_thread(
+                envelope = decode_envelope(
+                    message, expected_type="disruption_confirmed"
+                )
+                record = await asyncio.to_thread(
                     process_confirmed_event,
-                    event,
+                    envelope.payload,
                     store=resolved_store,
                     notifier=resolved_notifier,
                 )
+                if record.status in {"delivered", "duplicate"}:
+                    await message.ack_sync(timeout=3)
+                elif record.status == "rejected":
+                    await quarantine_message(
+                        message,
+                        store=resolved_store,
+                        consumer=NOTIFICATION_CONSUMER,
+                        event_id=envelope.event_id,
+                        payload=envelope.payload,
+                        error_code=record.error_code
+                        or "NOTIFICATION_EVENT_REJECTED",
+                    )
+                else:
+                    await retry_or_quarantine(
+                        message,
+                        store=resolved_store,
+                        consumer=NOTIFICATION_CONSUMER,
+                        event_id=envelope.event_id,
+                        payload=envelope.payload,
+                        error_code=record.error_code
+                        or "NOTIFICATION_ACTION_FAILED",
+                    )
             except Exception:
-                # Invalid or forged events are rejected without reaching MCP.
-                return
+                if envelope is None:
+                    await quarantine_message(
+                        message,
+                        store=resolved_store,
+                        consumer=NOTIFICATION_CONSUMER,
+                        event_id=fallback_event_id(message),
+                        payload={},
+                        error_code="CONFIRMED_EVENT_INVALID",
+                    )
+                else:
+                    await retry_or_quarantine(
+                        message,
+                        store=resolved_store,
+                        consumer=NOTIFICATION_CONSUMER,
+                        event_id=envelope.event_id,
+                        payload=envelope.payload,
+                        error_code="NOTIFICATION_ACTION_FAILED",
+                    )
 
-        subscription = await connection.subscribe(
-            DISRUPTION_CONFIRMED_SUBJECT,
-            queue="travel-notification-action-v1",
-            cb=handle_confirmed,
+        subscription = await subscribe_durable(
+            jetstream,
+            subject=DISRUPTION_CONFIRMED_SUBJECT,
+            durable_name=NOTIFICATION_CONSUMER,
+            callback=handle_confirmed,
         )
-        await connection.flush(timeout=3)
         app.state.ready = True
         try:
             yield

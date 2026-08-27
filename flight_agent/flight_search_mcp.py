@@ -82,4 +82,15 @@ async def health(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "provider": provider.name})
 
 
+@mcp.custom_route("/v1/reliability/audit", methods=["GET"])
+async def reliability_audit(request: Request) -> JSONResponse:
+    del request
+    if os.getenv("RELIABILITY_AUDIT_ENABLED", "false").lower() != "true":
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    audit = getattr(provider, "audit", None)
+    return JSONResponse(
+        audit() if callable(audit) else {"provider_call_count": None}
+    )
+
+
 app = mcp.streamable_http_app()

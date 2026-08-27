@@ -4,11 +4,15 @@ import json
 import os
 import time
 
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 import boto3
 
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import BotoCoreError, ClientError
+
+from flight_agent.event_delivery import candidate_outbox, confirmed_outbox
 
 
 DEFAULT_TABLE_NAME = "travel-monitoring-state"
@@ -32,6 +36,10 @@ class MonitoringStore(Protocol):
     ) -> None: ...
 
     def put_candidate(self, candidate: dict[str, Any]) -> None: ...
+
+    def get_candidate(self, candidate_id: str) -> dict[str, Any] | None: ...
+
+    def put_candidate_with_outbox(self, candidate: dict[str, Any]) -> None: ...
 
     def get_notification(self, decision_id: str) -> dict[str, Any] | None: ...
 
@@ -68,6 +76,38 @@ class MonitoringStore(Protocol):
     def wait_for_decision(
         self, candidate_id: str, *, timeout_seconds: float
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]: ...
+
+    def commit_evaluation_with_outbox(
+        self,
+        *,
+        candidate_id: str,
+        decision: dict[str, Any],
+        confirmed_event: dict[str, Any] | None,
+        episode_key: str,
+        notified_band: int | None,
+    ) -> None: ...
+
+    def list_outbox(
+        self, event_type: str, *, maximum: int = 20
+    ) -> list[dict[str, Any]]: ...
+
+    def delete_outbox(self, event_type: str, event_id: str) -> None: ...
+
+    def note_outbox_failure(self, event_type: str, event_id: str) -> None: ...
+
+    def outbox_count(self, event_type: str) -> int: ...
+
+    def put_dead_letter(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        payload: dict[str, Any],
+        error_code: str,
+        attempts: int,
+    ) -> None: ...
+
+    def dead_letter_count(self, consumer: str) -> int: ...
 
 
 class DynamoMonitoringStateStore:
@@ -151,14 +191,53 @@ class DynamoMonitoringStateStore:
 
     def _put(self, pk: str, sk: str, payload: dict[str, Any]) -> None:
         self._table.put_item(
-            Item={
-                "pk": pk,
-                "sk": sk,
-                "payload": json.dumps(
-                    payload, separators=(",", ":"), sort_keys=True
-                ),
-            }
+            Item=self._payload_item(pk, sk, payload)
         )
+
+    @staticmethod
+    def _payload_item(
+        pk: str, sk: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            "pk": pk,
+            "sk": sk,
+            "payload": json.dumps(
+                payload, separators=(",", ":"), sort_keys=True
+            ),
+        }
+
+    def _transaction_put(self, item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "Put": {
+                "TableName": self._table_name,
+                # The client attached to a DynamoDB resource applies boto3's
+                # native Python-to-AttributeValue transformer itself.
+                "Item": item,
+            }
+        }
+
+    @staticmethod
+    def _outbox_partition(event_type: str) -> str:
+        return f"OUTBOX#{event_type}"
+
+    @staticmethod
+    def _outbox_sort(event_id: str) -> str:
+        return f"EVENT#{event_id}"
+
+    @staticmethod
+    def _outbox_item(record: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "pk": DynamoMonitoringStateStore._outbox_partition(
+                str(record["event_type"])
+            ),
+            "sk": DynamoMonitoringStateStore._outbox_sort(
+                str(record["event_id"])
+            ),
+            "payload": json.dumps(
+                record, separators=(",", ":"), sort_keys=True
+            ),
+            "publish_attempts": 0,
+        }
 
     @staticmethod
     def _leg_partition(trip_id: str, leg_id: str) -> str:
@@ -201,6 +280,36 @@ class DynamoMonitoringStateStore:
             f"TRIP#{candidate['trip_id']}",
             f"CANDIDATE#{candidate['candidate_id']}",
             candidate,
+        )
+        self._put(
+            f"CANDIDATE#{candidate['candidate_id']}", "SOURCE", candidate
+        )
+
+    def get_candidate(self, candidate_id: str) -> dict[str, Any] | None:
+        return self._payload(
+            self._get(f"CANDIDATE#{candidate_id}", "SOURCE")
+        )
+
+    def put_candidate_with_outbox(self, candidate: dict[str, Any]) -> None:
+        record = candidate_outbox(candidate)
+        self._client.transact_write_items(
+            TransactItems=[
+                self._transaction_put(
+                    self._payload_item(
+                        f"TRIP#{candidate['trip_id']}",
+                        f"CANDIDATE#{candidate['candidate_id']}",
+                        candidate,
+                    )
+                ),
+                self._transaction_put(
+                    self._payload_item(
+                        f"CANDIDATE#{candidate['candidate_id']}",
+                        "SOURCE",
+                        candidate,
+                    )
+                ),
+                self._transaction_put(self._outbox_item(record)),
+            ]
         )
 
     def get_notification(self, decision_id: str) -> dict[str, Any] | None:
@@ -245,6 +354,51 @@ class DynamoMonitoringStateStore:
     def put_decision(self, candidate_id: str, decision: dict[str, Any]) -> None:
         self._put(f"CANDIDATE#{candidate_id}", "DECISION", decision)
 
+    def commit_evaluation_with_outbox(
+        self,
+        *,
+        candidate_id: str,
+        decision: dict[str, Any],
+        confirmed_event: dict[str, Any] | None,
+        episode_key: str,
+        notified_band: int | None,
+    ) -> None:
+        items: list[dict[str, Any]] = []
+        if confirmed_event is not None:
+            items.append(
+                self._transaction_put(
+                    self._payload_item(
+                        f"CANDIDATE#{candidate_id}",
+                        "CONFIRMED_EVENT",
+                        confirmed_event,
+                    )
+                )
+            )
+        if episode_key and notified_band is not None:
+            items.append(
+                self._transaction_put(
+                    {
+                        "pk": f"POLICY#{episode_key}",
+                        "sk": "HIGHEST_NOTIFIED_BAND",
+                        "band": notified_band,
+                    }
+                )
+            )
+        items.append(
+            self._transaction_put(
+                self._payload_item(
+                    f"CANDIDATE#{candidate_id}", "DECISION", decision
+                )
+            )
+        )
+        if confirmed_event is not None:
+            items.append(
+                self._transaction_put(
+                    self._outbox_item(confirmed_outbox(confirmed_event))
+                )
+            )
+        self._client.transact_write_items(TransactItems=items)
+
     def get_confirmed_event(self, candidate_id: str) -> dict[str, Any] | None:
         return self._payload(
             self._get(f"CANDIDATE#{candidate_id}", "CONFIRMED_EVENT")
@@ -280,3 +434,87 @@ class DynamoMonitoringStateStore:
                 return decision, self.get_confirmed_event(candidate_id)
             time.sleep(0.05)
         return None, None
+
+    def list_outbox(
+        self, event_type: str, *, maximum: int = 20
+    ) -> list[dict[str, Any]]:
+        response = self._table.query(
+            KeyConditionExpression=Key("pk").eq(
+                self._outbox_partition(event_type)
+            ),
+            Limit=maximum,
+            ConsistentRead=True,
+        )
+        records: list[dict[str, Any]] = []
+        for item in response.get("Items", []):
+            payload = self._payload(item)
+            if payload is not None:
+                records.append(payload)
+        return records
+
+    def delete_outbox(self, event_type: str, event_id: str) -> None:
+        self._table.delete_item(
+            Key={
+                "pk": self._outbox_partition(event_type),
+                "sk": self._outbox_sort(event_id),
+            }
+        )
+
+    def note_outbox_failure(self, event_type: str, event_id: str) -> None:
+        self._table.update_item(
+            Key={
+                "pk": self._outbox_partition(event_type),
+                "sk": self._outbox_sort(event_id),
+            },
+            UpdateExpression=(
+                "ADD publish_attempts :one SET last_attempt_at = :attempted"
+            ),
+            ExpressionAttributeValues={
+                ":one": 1,
+                ":attempted": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+            },
+        )
+
+    def outbox_count(self, event_type: str) -> int:
+        response = self._table.query(
+            KeyConditionExpression=Key("pk").eq(
+                self._outbox_partition(event_type)
+            ),
+            Select="COUNT",
+            ConsistentRead=True,
+        )
+        return int(response.get("Count", 0))
+
+    def put_dead_letter(
+        self,
+        *,
+        consumer: str,
+        event_id: str,
+        payload: dict[str, Any],
+        error_code: str,
+        attempts: int,
+    ) -> None:
+        self._table.put_item(
+            Item={
+                "pk": f"DEADLETTER#{consumer}",
+                "sk": f"EVENT#{event_id}",
+                "payload": json.dumps(
+                    payload, separators=(",", ":"), sort_keys=True
+                ),
+                "error_code": error_code,
+                "attempts": attempts,
+                "recorded_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+            }
+        )
+
+    def dead_letter_count(self, consumer: str) -> int:
+        response = self._table.query(
+            KeyConditionExpression=Key("pk").eq(f"DEADLETTER#{consumer}"),
+            Select="COUNT",
+            ConsistentRead=True,
+        )
+        return int(response.get("Count", 0))

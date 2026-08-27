@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
@@ -49,6 +51,14 @@ def send_notification(command: NotificationCommand) -> NotificationReceipt:
 async def health(request: Request) -> JSONResponse:
     del request
     return JSONResponse({"status": "ok", "provider": "recording"})
+
+
+@mcp.custom_route("/v1/reliability/audit", methods=["GET"])
+async def reliability_audit(request: Request) -> JSONResponse:
+    del request
+    if os.getenv("RELIABILITY_AUDIT_ENABLED", "false").lower() != "true":
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    return JSONResponse(provider.audit())
 
 
 app = mcp.streamable_http_app()

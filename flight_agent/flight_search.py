@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 from collections import Counter
 from dataclasses import dataclass
@@ -55,13 +56,21 @@ class ReplayFlightSearchProvider:
         if not isinstance(options, list):
             raise ValueError("Flight search replay fixture must contain options")
         self._options = [ProviderFlightOption.model_validate(item) for item in options]
+        self._call_count = 0
+        self._lock = threading.Lock()
 
     def search(self, command: FlightSearchCommand) -> ProviderSearchBatch:
         del command
+        with self._lock:
+            self._call_count += 1
         return ProviderSearchBatch(
             source_scope="synthetic_replay",
             options=[option.model_copy(deep=True) for option in self._options],
         )
+
+    def audit(self) -> dict[str, int]:
+        with self._lock:
+            return {"provider_call_count": self._call_count}
 
 
 class DuffelFlightSearchProviderError(RuntimeError):

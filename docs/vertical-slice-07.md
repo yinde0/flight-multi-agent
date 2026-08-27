@@ -128,8 +128,9 @@ The exact expected output lives in
 - S3 upload and the Postgres transaction are not one atomic operation. If the
   database write fails after upload, the content-addressed object is safe to
   retry but may need lifecycle cleanup if the trip is never retried.
-- Core NATS delivery for downstream disruption events is still not a complete
-  transactional-outbox solution.
+- Vertical slice 08 now supplies transactional DynamoDB outboxes and durable
+  JetStream consumers for downstream disruption events. It does not change the
+  separate S3/Postgres cross-store limitation above.
 - Local MinIO credentials in `.env.example` are development defaults, not
   production credentials. Production should use workload identity and managed
   secrets.

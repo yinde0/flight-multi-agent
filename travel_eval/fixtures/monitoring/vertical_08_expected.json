@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Golden invariants for transactional outbox recovery and durable JetStream delivery.",
+  "baseline_status": "baseline_stored",
+  "outage_poll_status": "poll_failed",
+  "outage_error_code": "CANDIDATE_EVENT_PUBLISH_FAILED",
+  "candidate_outbox_during_outage": 1,
+  "candidate_outbox_after_recovery": 0,
+  "decision_verdict": "NOTIFY_AND_SEARCH",
+  "notification_status": "delivered",
+  "search_status": "completed",
+  "notification_provider_call_delta": 1,
+  "search_provider_call_delta": 1,
+  "dead_letter_total": 0,
+  "outbox_pending_total": 0
+}

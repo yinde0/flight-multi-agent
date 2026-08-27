@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
-
 from typing import Any, Protocol
 
 import nats
 
-
-DISRUPTION_CANDIDATE_SUBJECT = "travel.disruption_candidate.v1"
-DISRUPTION_CONFIRMED_SUBJECT = "travel.disruption_confirmed.v1"
+from flight_agent.event_delivery import (
+    DISRUPTION_CANDIDATE_SUBJECT,
+    DISRUPTION_CONFIRMED_SUBJECT,
+    candidate_outbox,
+    ensure_event_stream,
+    publish_durable_event,
+)
 
 
 class CandidatePublisher(Protocol):
@@ -21,19 +23,17 @@ class NatsCandidatePublisher:
         self._nats_url = nats_url
 
     def publish_candidate(self, candidate: dict[str, Any]) -> None:
-        asyncio.run(self._publish(candidate))
+        asyncio.run(self.publish_record(candidate_outbox(candidate)))
 
-    async def _publish(self, candidate: dict[str, Any]) -> None:
+    async def publish_record(self, record: dict[str, Any]) -> None:
         connection = await nats.connect(
             servers=[self._nats_url],
             connect_timeout=3,
             max_reconnect_attempts=3,
         )
         try:
-            await connection.publish(
-                DISRUPTION_CANDIDATE_SUBJECT,
-                json.dumps(candidate, separators=(",", ":")).encode("utf-8"),
-            )
-            await connection.flush(timeout=3)
+            jetstream = connection.jetstream()
+            await ensure_event_stream(jetstream)
+            await publish_durable_event(jetstream, record)
         finally:
             await connection.drain()

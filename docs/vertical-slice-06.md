@@ -137,5 +137,6 @@ booking authority, and no duplicate action on the unchanged third poll.
 - A ticket imported from a PDF is not automatically a Duffel-managed order, so
   this slice cannot exchange or cancel that existing ticket.
 - No booking or payment capability exists anywhere in this slice.
-- Core NATS is still non-durable for this event path. A transactional outbox or
-  durable JetStream consumer is required before production action reliability.
+- Vertical slice 08 now supplies DynamoDB transactional outboxes and durable
+  JetStream consumers for this event path. Production still needs a replicated
+  JetStream cluster and provider-enforced idempotency.

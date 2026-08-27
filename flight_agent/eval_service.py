@@ -12,9 +12,21 @@ import nats
 
 from fastapi import FastAPI, HTTPException
 
-from flight_agent.monitoring_events import (
+from flight_agent.event_delivery import (
+    EVAL_CONSUMER,
+    EVENT_STREAM_NAME,
     DISRUPTION_CANDIDATE_SUBJECT,
-    DISRUPTION_CONFIRMED_SUBJECT,
+    NOTIFICATION_CONSUMER,
+    SEARCH_CONSUMER,
+    confirmed_outbox,
+    decode_envelope,
+    ensure_event_stream,
+    fallback_event_id,
+    publish_durable_event,
+    publish_pending_outbox,
+    quarantine_message,
+    retry_or_quarantine,
+    subscribe_durable,
 )
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
 from travel_eval.policy import PolicyState, SuppressionPolicy
@@ -97,6 +109,16 @@ def commit_evaluation(
     notified_band: int | None,
     store: MonitoringStore,
 ) -> None:
+    atomic_commit = getattr(store, "commit_evaluation_with_outbox", None)
+    if callable(atomic_commit):
+        atomic_commit(
+            candidate_id=candidate_id,
+            decision=decision,
+            confirmed_event=confirmed_event,
+            episode_key=episode_key,
+            notified_band=notified_band,
+        )
+        return
     if confirmed_event is not None:
         store.put_confirmed_event(candidate_id, confirmed_event)
     if episode_key and notified_band is not None:
@@ -134,10 +156,38 @@ def create_eval_app(
         connection = await connect_nats(
             os.getenv("NATS_URL", "nats://127.0.0.1:4222")
         )
+        jetstream = connection.jetstream()
+        await ensure_event_stream(jetstream)
+        stop = asyncio.Event()
+
+        async def publish_confirmed(record: dict[str, Any]) -> None:
+            await publish_durable_event(jetstream, record)
+
+        async def drain_confirmed_outbox() -> None:
+            interval = max(
+                0.25, float(os.getenv("OUTBOX_RETRY_INTERVAL_SECONDS", "2"))
+            )
+            while not stop.is_set():
+                try:
+                    await publish_pending_outbox(
+                        store=resolved_store,
+                        event_type="disruption_confirmed",
+                        publish=publish_confirmed,
+                    )
+                except Exception:
+                    pass
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=interval)
+                except TimeoutError:
+                    continue
 
         async def handle_candidate(message) -> None:
+            envelope = None
             try:
-                candidate = json.loads(message.data.decode("utf-8"))
+                envelope = decode_envelope(
+                    message, expected_type="disruption_candidate"
+                )
+                candidate = envelope.payload
                 (
                     decision,
                     confirmed_event,
@@ -151,15 +201,8 @@ def create_eval_app(
                     resolved_policy,
                 )
                 if already_processed:
+                    await message.ack_sync(timeout=3)
                     return
-                if confirmed_event is not None:
-                    await connection.publish(
-                        DISRUPTION_CONFIRMED_SUBJECT,
-                        json.dumps(
-                            confirmed_event, separators=(",", ":")
-                        ).encode("utf-8"),
-                    )
-                    await connection.flush(timeout=3)
                 await asyncio.to_thread(
                     commit_evaluation,
                     candidate_id=candidate["candidate_id"],
@@ -169,23 +212,63 @@ def create_eval_app(
                     notified_band=notified_band,
                     store=resolved_store,
                 )
+                if confirmed_event is not None:
+                    record = confirmed_outbox(confirmed_event)
+                    try:
+                        await publish_confirmed(record)
+                        deleter = getattr(resolved_store, "delete_outbox", None)
+                        if callable(deleter):
+                            await asyncio.to_thread(
+                                deleter,
+                                "disruption_confirmed",
+                                str(record["event_id"]),
+                            )
+                    except Exception:
+                        # The atomic outbox remains for the background publisher.
+                        pass
+                await message.ack_sync(timeout=3)
             except Exception:
-                # The health endpoint remains alive; missing decisions surface as
-                # evaluation_pending to the orchestrator instead of fabricated output.
-                return
+                payload = envelope.payload if envelope is not None else {}
+                event_id = (
+                    envelope.event_id
+                    if envelope is not None
+                    else fallback_event_id(message)
+                )
+                if envelope is None:
+                    await quarantine_message(
+                        message,
+                        store=resolved_store,
+                        consumer=EVAL_CONSUMER,
+                        event_id=event_id,
+                        payload=payload,
+                        error_code="CANDIDATE_EVENT_INVALID",
+                    )
+                else:
+                    await retry_or_quarantine(
+                        message,
+                        store=resolved_store,
+                        consumer=EVAL_CONSUMER,
+                        event_id=event_id,
+                        payload=payload,
+                        error_code="EVALUATION_FAILED",
+                    )
 
-        subscription = await connection.subscribe(
-            DISRUPTION_CANDIDATE_SUBJECT,
-            queue="travel-eval-agent-v1",
-            cb=handle_candidate,
+        subscription = await subscribe_durable(
+            jetstream,
+            subject=DISRUPTION_CANDIDATE_SUBJECT,
+            durable_name=EVAL_CONSUMER,
+            callback=handle_candidate,
         )
-        await connection.flush(timeout=3)
+        outbox_task = asyncio.create_task(drain_confirmed_outbox())
         app.state.ready = True
         app.state.nats = connection
+        app.state.jetstream = jetstream
         try:
             yield
         finally:
             app.state.ready = False
+            stop.set()
+            await outbox_task
             await subscription.unsubscribe()
             await connection.drain()
 
@@ -201,6 +284,122 @@ def create_eval_app(
         if not app.state.ready:
             raise HTTPException(status_code=503, detail="Eval Agent is starting")
         return {"status": "ok"}
+
+    def require_reliability_audit() -> None:
+        if os.getenv("RELIABILITY_AUDIT_ENABLED", "false").lower() != "true":
+            raise HTTPException(status_code=404, detail="Reliability audit is disabled")
+
+    @app.get(
+        "/v1/reliability/events/{candidate_id}", tags=["test-control"]
+    )
+    async def reliability_event(candidate_id: str) -> dict[str, Any]:
+        require_reliability_audit()
+        candidate_reader = getattr(resolved_store, "get_candidate", None)
+        candidate = (
+            await asyncio.to_thread(candidate_reader, candidate_id)
+            if callable(candidate_reader)
+            else None
+        )
+        decision = await asyncio.to_thread(
+            resolved_store.get_decision, candidate_id
+        )
+        confirmed = await asyncio.to_thread(
+            resolved_store.get_confirmed_event, candidate_id
+        )
+        decision_id = str(decision["decision_id"]) if decision else None
+        notification = (
+            await asyncio.to_thread(
+                resolved_store.get_notification, decision_id
+            )
+            if decision_id
+            else None
+        )
+        search = (
+            await asyncio.to_thread(resolved_store.get_search, decision_id)
+            if decision_id
+            else None
+        )
+        counter = getattr(resolved_store, "outbox_count", None)
+        dead_counter = getattr(resolved_store, "dead_letter_count", None)
+        outboxes = {}
+        dead_letters = {}
+        if callable(counter):
+            for event_type in (
+                "disruption_candidate",
+                "disruption_confirmed",
+            ):
+                outboxes[event_type] = await asyncio.to_thread(
+                    counter, event_type
+                )
+        if callable(dead_counter):
+            for consumer in (
+                EVAL_CONSUMER,
+                NOTIFICATION_CONSUMER,
+                SEARCH_CONSUMER,
+            ):
+                dead_letters[consumer] = await asyncio.to_thread(
+                    dead_counter, consumer
+                )
+        return {
+            "candidate": candidate,
+            "decision": decision,
+            "confirmed_event": confirmed,
+            "notification": notification,
+            "search": search,
+            "outbox_pending": outboxes,
+            "dead_letter_counts": dead_letters,
+        }
+
+    @app.get("/v1/reliability/bus", tags=["test-control"])
+    async def reliability_bus() -> dict[str, Any]:
+        require_reliability_audit()
+        stream = await app.state.jetstream.stream_info(EVENT_STREAM_NAME)
+        consumers: dict[str, Any] = {}
+        for name in (EVAL_CONSUMER, NOTIFICATION_CONSUMER, SEARCH_CONSUMER):
+            try:
+                info = await app.state.jetstream.consumer_info(
+                    EVENT_STREAM_NAME, name
+                )
+                consumers[name] = {
+                    "pending": int(info.num_pending or 0),
+                    "ack_pending": int(info.num_ack_pending or 0),
+                    "redelivered": int(info.num_redelivered or 0),
+                }
+            except Exception:
+                consumers[name] = None
+        return {
+            "stream": EVENT_STREAM_NAME,
+            "messages": stream.state.messages,
+            "consumer_count": stream.state.consumer_count,
+            "consumers": consumers,
+        }
+
+    @app.post(
+        "/v1/reliability/events/{candidate_id}/redeliver",
+        tags=["test-control"],
+    )
+    async def force_redelivery(
+        candidate_id: str, request: dict[str, str]
+    ) -> dict[str, str]:
+        require_reliability_audit()
+        delivery_id = str(request.get("delivery_id") or "").strip()
+        if not delivery_id:
+            raise HTTPException(status_code=422, detail="delivery_id is required")
+        event = await asyncio.to_thread(
+            resolved_store.get_confirmed_event, candidate_id
+        )
+        if event is None:
+            raise HTTPException(status_code=404, detail="Confirmed event not found")
+        record = confirmed_outbox(event)
+        await publish_durable_event(
+            app.state.jetstream,
+            record,
+            message_id=f"forced-redelivery:{delivery_id}",
+        )
+        return {
+            "status": "published",
+            "event_id": str(record["event_id"]),
+        }
 
     return app
 
