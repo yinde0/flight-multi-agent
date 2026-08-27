@@ -1,4 +1,53 @@
 services:
+  postgres:
+    image: postgres:16.15-alpine3.24
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-travel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-travel-local}
+      POSTGRES_DB: ${POSTGRES_DB:-travel}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - travel-internal
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command:
+      - server
+      - /data
+      - --console-address
+      - :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-travel-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-travel-local-secret}
+    volumes:
+      - minio-data:/data
+    expose:
+      - "9000"
+      - "9001"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://127.0.0.1:9000/minio/health/live
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - travel-internal
+
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     # The official image runs as uid 1000, while a fresh named volume is
@@ -384,6 +433,54 @@ services:
       - travel-internal
       - document-egress
 
+  trip-orchestrator:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.trip_orchestrator:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8011"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-travel}:${POSTGRES_PASSWORD:-travel-local}@postgres:5432/${POSTGRES_DB:-travel}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-travel-local}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-travel-local-secret}
+      AWS_REGION: ${AWS_REGION:-eu-west-2}
+      S3_ENDPOINT_URL: http://minio:9000
+      ITINERARY_BUCKET_NAME: ${ITINERARY_BUCKET_NAME:-travel-itineraries}
+      DOCUMENT_AGENT_URL: http://document-agent:8001
+      MONITOR_AGENT_URL: http://monitor-agent:8004
+      SCHEDULER_BACKGROUND_ENABLED: ${SCHEDULER_BACKGROUND_ENABLED:-true}
+      SCHEDULER_CONTROL_ENABLED: ${SCHEDULER_CONTROL_ENABLED:-false}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-30}
+      SCHEDULER_LEASE_SECONDS: ${SCHEDULER_LEASE_SECONDS:-120}
+      NO_PROXY: document-agent,monitor-agent,postgres,minio,localhost,127.0.0.1
+    depends_on:
+      document-agent:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      monitor-agent:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8011"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+
   travel-api:
     build:
       context: .
@@ -397,11 +494,15 @@ services:
     environment:
       DOCUMENT_AGENT_URL: http://document-agent:8001
       MONITOR_AGENT_URL: http://monitor-agent:8004
-      NO_PROXY: document-agent,monitor-agent,localhost,127.0.0.1
+      TRIP_ORCHESTRATOR_URL: http://trip-orchestrator:8011
+      SCHEDULER_CONTROL_ENABLED: ${SCHEDULER_CONTROL_ENABLED:-false}
+      NO_PROXY: document-agent,monitor-agent,trip-orchestrator,localhost,127.0.0.1
     depends_on:
       document-agent:
         condition: service_healthy
       monitor-agent:
+        condition: service_healthy
+      trip-orchestrator:
         condition: service_healthy
     ports:
       - "8080:8000"
@@ -434,4 +535,6 @@ networks:
 
 volumes:
   dynamodb-data:
+  minio-data:
   nats-data:
+  postgres-data:

@@ -37,5 +37,14 @@
 | F33 | Search provider returns wrong route, original flight, or excessive stops | Filter each unsafe option | Only two feasible ranked alternatives | Automated: vertical-06 |
 | F34 | Duffel returns test-mode offers | Label as test evidence | `provider_test_offers`; availability false | Automated unit + networked Duffel vertical |
 | F35 | Duffel error body contains a secret | Return only sanitized status/code | Token and response message absent | Automated security unit |
+| F36 | The same itinerary is activated twice | Reuse the stored trip and schedule | `already_active`; one trip and one leg | Automated unit + vertical-07 |
+| F37 | Trip Orchestrator restarts between due polls | Resume from Postgres | Two total polls; no duplicate tick work | Automated: vertical-07 restart |
+| F38 | A trip ID is reused with different PDF evidence | Reject conflicting authority | HTTP 409; original trip remains authoritative | Automated unit |
+| F39 | Parsed document requires human review | Store evidence but do not schedule | `review_required`; zero active legs | Automated unit |
+| F40 | S3 object is missing or checksum metadata differs | Report failed storage verification | `stored: false`; database reference is not treated as proof | Automated unit |
+| F41 | Monitoring Agent fails after a due leg is claimed | Record failure and retry later | Five-minute retry; no synthetic disruption | Planned Postgres integration test |
+| F42 | S3 succeeds but Postgres activation fails | Safe content-addressed retry; clean orphan later | No scheduled leg without committed trip | Planned cross-store chaos test |
+| F43 | Two scheduler workers claim the same due set | Lease rows with skip-locked semantics | One owner per claimed leg | Planned concurrent Postgres integration test |
+| F44 | A newly activated due timestamp includes microseconds | Preserve exact poll identity | Guarded completion increments poll count | Automated unit + vertical-07 |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

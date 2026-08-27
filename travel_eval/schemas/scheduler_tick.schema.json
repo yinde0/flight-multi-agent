@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/scheduler_tick.schema.json",
+  "title": "Virtual or Real Scheduler Tick Outcome",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "requested_at", "claimed_count", "completed_count",
+    "failed_count", "results"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "requested_at": {"type": "string", "format": "date-time"},
+    "claimed_count": {"type": "integer", "minimum": 0},
+    "completed_count": {"type": "integer", "minimum": 0},
+    "failed_count": {"type": "integer", "minimum": 0},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["trip_id", "leg_id", "poll_key", "status"],
+        "properties": {
+          "trip_id": {"type": "string"},
+          "leg_id": {"type": "string"},
+          "poll_key": {"type": "string"},
+          "status": {"enum": ["completed", "failed"]},
+          "monitoring_status": {"type": ["string", "null"]},
+          "category": {"type": ["string", "null"]},
+          "verdict": {"type": ["string", "null"]},
+          "notification_status": {"type": ["string", "null"]},
+          "search_status": {"type": ["string", "null"]},
+          "notification_id": {"type": ["string", "null"]},
+          "search_id": {"type": ["string", "null"]},
+          "error_code": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

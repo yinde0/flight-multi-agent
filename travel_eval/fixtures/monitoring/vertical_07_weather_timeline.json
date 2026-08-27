@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "airport": "LHR",
+  "description": "Neutral weather for automatic Slice 07 monitoring.",
+  "observations": [
+    {"schema_version": "1.0.0", "observation_id": "weather-v7-001", "observed_at": "2026-09-15T06:00:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 800, "condition": "Clear", "description": "clear sky", "risk_level": "none", "alerts": [], "precipitation_probability": 0.0, "wind_speed_mps": 3.0, "visibility_metres": 10000, "confidence": 0.95},
+    {"schema_version": "1.0.0", "observation_id": "weather-v7-002", "observed_at": "2026-09-15T06:10:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 800, "condition": "Clear", "description": "clear sky", "risk_level": "none", "alerts": [], "precipitation_probability": 0.0, "wind_speed_mps": 3.0, "visibility_metres": 10000, "confidence": 0.95},
+    {"schema_version": "1.0.0", "observation_id": "weather-v7-003", "observed_at": "2026-09-15T06:20:00Z", "source": "mock-openweather", "airport": "LHR", "latitude": 51.47, "longitude": -0.4543, "target_at": "2026-09-15T08:20:00Z", "forecast_at": "2026-09-15T09:00:00Z", "condition_code": 800, "condition": "Clear", "description": "clear sky", "risk_level": "none", "alerts": [], "precipitation_probability": 0.0, "wind_speed_mps": 3.0, "visibility_metres": 10000, "confidence": 0.95}
+  ]
+}

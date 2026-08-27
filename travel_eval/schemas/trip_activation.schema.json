@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/trip_activation.schema.json",
+  "title": "Trip Activation Outcome",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "trip_id", "trip_status", "parse_status",
+    "document", "active_leg_count", "idempotent_replay"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "status": {"enum": ["activated", "already_active", "review_required"]},
+    "trip_id": {"type": "string", "pattern": "^trip-[a-z0-9-]+$"},
+    "trip_status": {"enum": ["active", "review_required"]},
+    "parse_status": {"enum": ["parsed", "review_required"]},
+    "document": {"$ref": "#/$defs/document"},
+    "itinerary": {
+      "oneOf": [
+        {"$ref": "itinerary.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "review": {"type": ["object", "null"]},
+    "active_leg_count": {"type": "integer", "minimum": 0},
+    "next_poll_at": {"type": ["string", "null"], "format": "date-time"},
+    "idempotent_replay": {"type": "boolean"}
+  },
+  "$defs": {
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "key", "sha256"],
+      "properties": {
+        "bucket": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "etag": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

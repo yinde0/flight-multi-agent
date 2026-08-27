@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Golden invariants for persisted trip activation and virtual-clock scheduling.",
+  "activation": {
+    "status": "activated",
+    "trip_status": "active",
+    "parse_status": "parsed",
+    "active_leg_count": 1,
+    "document_bucket": "travel-itineraries"
+  },
+  "idempotent_activation": {
+    "status": "already_active",
+    "idempotent_replay": true,
+    "active_leg_count": 1
+  },
+  "ticks": [
+    {"requested_at": "2026-09-15T06:00:00Z", "claimed_count": 1, "completed_count": 1, "monitoring_status": "baseline_stored"},
+    {"requested_at": "2026-09-15T06:00:00Z", "claimed_count": 0, "completed_count": 0},
+    {"requested_at": "2026-09-15T06:10:00Z", "claimed_count": 1, "completed_count": 1, "monitoring_status": "candidate_evaluated"},
+    {"requested_at": "2026-09-15T06:10:00Z", "claimed_count": 0, "completed_count": 0}
+  ],
+  "final_trip": {
+    "status": "active",
+    "leg_count": 1,
+    "poll_count": 2,
+    "last_poll_status": "candidate_evaluated",
+    "next_poll_at": "2026-09-15T06:20:00Z"
+  }
+}

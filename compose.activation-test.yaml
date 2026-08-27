@@ -1,0 +1,24 @@
+services:
+  flight-status-mcp:
+    environment:
+      FLIGHT_STATUS_PROVIDER: replay
+      FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_07_flight_timeline.json
+
+  weather-mcp:
+    environment:
+      WEATHER_PROVIDER: replay
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_07_weather_timeline.json
+
+  flight-search-mcp:
+    environment:
+      FLIGHT_SEARCH_PROVIDER: replay
+      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_07_options.json
+
+  trip-orchestrator:
+    environment:
+      SCHEDULER_BACKGROUND_ENABLED: "false"
+      SCHEDULER_CONTROL_ENABLED: "true"
+
+  travel-api:
+    environment:
+      SCHEDULER_CONTROL_ENABLED: "true"

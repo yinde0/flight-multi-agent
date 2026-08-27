@@ -2,7 +2,9 @@
 
 This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. Its executable vertical paths now parse native-text and image-only PDFs, then statefully monitor flight-status changes and evaluate whether they are significant.
 
-The package defines the contracts those components must satisfy and provides deterministic scenario replay before any application implementation exists.
+The package defines the contracts those components must satisfy and keeps
+deterministic scenario replay as the acceptance boundary for every application
+vertical slice.
 
 ## Document vertical slices
 
@@ -128,6 +130,36 @@ Duffel test tokens are reported as `provider_test_offers`; only live-mode
 responses are reported as `live_offers`. Both retain
 `booking_guaranteed: false` and `booking_authorized: false`.
 
+## Persisted trip activation and continuous scheduling
+
+Vertical slice 07 connects document parsing to continuous monitoring instead of
+requiring a person to submit each poll. A light Trip Orchestrator stores the
+immutable source PDF in S3-compatible storage, writes the parsed itinerary and
+per-leg schedule to Postgres, and calls the existing Monitoring Agent only when a
+leg is due.
+
+```text
+PDF -> Travel API -> Trip Orchestrator -> S3-compatible document storage
+                                  |----> A2A Document Agent
+                                  |----> Postgres trip + due-leg schedule
+                                  `----> A2A Monitoring Agent when due
+                                                `-> existing Eval/actions path
+```
+
+Run the virtual-clock golden and restart the orchestrator between the baseline
+and cancellation polls:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.activation-test.yaml up --build -d --wait
+.\.venv\Scripts\python.exe tools\run_vertical_activation_test.py --restart-orchestrator
+docker compose -f compose.yaml -f compose.test.yaml -f compose.activation-test.yaml down
+```
+
+The test requires an idempotent repeated upload, a checksum-verifiable PDF in
+object storage, two persisted polls across the restart, zero work on duplicate
+ticks, and exactly one notification plus one read-only rebooking search. See
+[docs/vertical-slice-07.md](docs/vertical-slice-07.md).
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, approved notification actions, and authorized read-only searches.
@@ -137,7 +169,8 @@ responses are reported as `live_offers`. Both retain
 - Curated expected candidates, decisions, notifications, and ignored stale observations.
 - A virtual-clock runner that never waits for wall-clock time.
 - Release metrics and acceptance thresholds.
-- A failure and chaos-test matrix for later infrastructure work.
+- A failure and chaos-test matrix covering implemented and planned infrastructure
+  behavior.
 
 ## Run the evaluation
 
@@ -193,9 +226,9 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 ## Intended implementation boundary
 
 The flight-status, weather, notification, and read-only flight-search MCP tools,
-NATS event path, DynamoDB state adapter, Monitoring Agent, Eval Agent, and
-post-Eval action services now exist. RDS and S3 adapters can replace
-fixture-backed itinerary inputs without changing the canonical contracts. The
-capability MCPs are reachable only from their post-evaluation action services,
-and `NOTIFY_AND_SEARCH` is never interpreted as permission to purchase, hold,
-exchange, or cancel travel.
+NATS event path, DynamoDB live-state adapter, Monitoring Agent, Eval Agent, and
+post-Eval action services now exist. Trip activation uses an RDS-compatible
+Postgres adapter and an S3-compatible document adapter; Docker supplies local
+Postgres and MinIO instances. The capability MCPs are reachable only from their
+post-evaluation action services, and `NOTIFY_AND_SEARCH` is never interpreted as
+permission to purchase, hold, exchange, or cancel travel.

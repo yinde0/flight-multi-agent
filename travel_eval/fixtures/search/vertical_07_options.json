@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Synthetic LHR-AMS alternatives for the automatic Slice 07 cancellation.",
+  "options": [
+    {
+      "option_id": "option-v7-direct",
+      "segments": [
+        {"flight_iata": "NB310", "origin": "LHR", "destination": "AMS", "departure_at": "2026-09-15T09:30:00Z", "arrival_at": "2026-09-15T10:45:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-v7-one-stop",
+      "segments": [
+        {"flight_iata": "NB410", "origin": "LHR", "destination": "BRU", "departure_at": "2026-09-15T09:00:00Z", "arrival_at": "2026-09-15T10:00:00Z"},
+        {"flight_iata": "NB411", "origin": "BRU", "destination": "AMS", "departure_at": "2026-09-15T11:00:00Z", "arrival_at": "2026-09-15T12:00:00Z"}
+      ]
+    },
+    {
+      "option_id": "option-v7-wrong-route",
+      "segments": [
+        {"flight_iata": "NB320", "origin": "LHR", "destination": "CDG", "departure_at": "2026-09-15T10:00:00Z", "arrival_at": "2026-09-15T11:15:00Z"}
+      ]
+    }
+  ]
+}
