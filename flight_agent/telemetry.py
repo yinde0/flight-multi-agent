@@ -9,7 +9,7 @@ import threading
 
 from collections import Counter
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Mapping
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
@@ -22,6 +22,7 @@ _crewai_instrumented = False
 _content_capture_enabled = False
 _service_name = "travel-service"
 _operation_counts: Counter[tuple[str, str]] = Counter()
+TRACE_CONTEXT_HEADERS = ("traceparent", "tracestate")
 
 
 def _enabled(name: str) -> bool:
@@ -42,6 +43,72 @@ def development_content_capture_enabled() -> bool:
         == "development"
         and _enabled("OTEL_TRACE_CONTENT_ENABLED")
     )
+
+
+def trace_headers(carrier: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """Inject the current W3C trace context into a small, privacy-safe carrier."""
+
+    headers = {
+        str(key).lower(): str(value)
+        for key, value in (carrier or {}).items()
+        if str(key).lower() in TRACE_CONTEXT_HEADERS and value is not None
+    }
+    try:
+        from opentelemetry.propagate import inject
+
+        injected: dict[str, str] = {}
+        inject(injected)
+        for key in TRACE_CONTEXT_HEADERS:
+            if injected.get(key):
+                headers[key] = str(injected[key])
+    except Exception:
+        pass
+    return headers
+
+
+@contextmanager
+def extracted_trace_context(
+    carrier: Mapping[str, Any] | None,
+) -> Iterator[None]:
+    """Attach an incoming W3C context and always restore the previous context."""
+
+    token = None
+    try:
+        from opentelemetry.context import attach
+        from opentelemetry.propagate import extract
+
+        normalized = {
+            str(key).lower(): str(value)
+            for key, value in (carrier or {}).items()
+            if str(key).lower() in TRACE_CONTEXT_HEADERS and value is not None
+        }
+        token = attach(extract(normalized))
+    except Exception:
+        token = None
+    try:
+        yield
+    finally:
+        if token is not None:
+            try:
+                from opentelemetry.context import detach
+
+                detach(token)
+            except Exception:
+                pass
+
+
+def current_trace_id() -> str | None:
+    """Return the active trace ID for correlation, never a source-data value."""
+
+    try:
+        from opentelemetry import trace
+
+        context = trace.get_current_span().get_span_context()
+        if context.is_valid:
+            return format(context.trace_id, "032x")
+    except Exception:
+        pass
+    return None
 
 
 def _content_text(value: Any) -> str:
@@ -131,10 +198,10 @@ def configure_telemetry(service_name: str) -> bool:
             _export_enabled = True
             _content_capture_enabled = development_content_capture_enabled()
 
-            if (
-                service_name == "document-agent"
-                and _enabled("CREWAI_OTEL_ENABLED")
-            ):
+            if _enabled("CREWAI_OTEL_ENABLED"):
+                os.environ.setdefault("CREWAI_DISABLE_TELEMETRY", "true")
+                os.environ.setdefault("CREWAI_DISABLE_TRACKING", "true")
+                os.environ.setdefault("CREWAI_DISABLE_VERSION_CHECK", "true")
                 # Production always resolves to false, even if a container is
                 # accidentally launched with a development content flag.
                 os.environ["TRACELOOP_TRACE_CONTENT"] = (
@@ -320,6 +387,7 @@ def install_telemetry_routes(
     app: FastAPI, *, service_name: str, include_metrics: bool = True
 ) -> None:
     configure_telemetry(service_name)
+    install_trace_middleware(app, service_name=service_name)
 
     if include_metrics:
 
@@ -342,3 +410,38 @@ def install_telemetry_routes(
                 else "disabled"
             ),
         }
+
+
+def install_trace_middleware(app: Any, *, service_name: str) -> None:
+    """Continue inbound W3C context and expose the trace ID on HTTP responses."""
+
+    if getattr(app.state, "travel_trace_middleware_installed", False):
+        return
+    app.state.travel_trace_middleware_installed = True
+    configure_telemetry(service_name)
+
+    async def distributed_trace_middleware(request, call_next):
+        with extracted_trace_context(request.headers):
+            with trace_operation(
+                "http.server",
+                service_name=service_name,
+                kind="chain",
+                attributes={"http.request.method": request.method},
+            ) as span:
+                response = await call_next(request)
+                route = request.scope.get("route")
+                route_path = getattr(route, "path", None)
+                if span is not None:
+                    span.set_attribute("http.response.status_code", response.status_code)
+                    if route_path:
+                        span.set_attribute("http.route", str(route_path))
+                active_trace_id = current_trace_id()
+                if active_trace_id:
+                    response.headers["X-Trace-Id"] = active_trace_id
+                return response
+
+    # FastAPI exposes ``@app.middleware`` but MCP's Streamable HTTP transport
+    # returns a plain Starlette app. BaseHTTPMiddleware is supported by both.
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=distributed_trace_middleware)

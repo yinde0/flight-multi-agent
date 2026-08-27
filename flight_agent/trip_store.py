@@ -76,6 +76,10 @@ class TripStore(Protocol):
         created_at: datetime,
     ) -> bool: ...
 
+    def put_trace_context(
+        self, trip_id: str, trace_headers: dict[str, str]
+    ) -> None: ...
+
     def claim_due_legs(
         self, *, now: datetime, maximum_legs: int, lease_seconds: int
     ) -> list[ScheduledLeg]: ...
@@ -138,6 +142,12 @@ CREATE TABLE IF NOT EXISTS monitoring_runs (
     outcome_json JSONB,
     error_code TEXT,
     recorded_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trip_trace_contexts (
+    trip_id TEXT PRIMARY KEY REFERENCES trips(trip_id) ON DELETE CASCADE,
+    trace_headers_json JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
 );
 """
 
@@ -314,6 +324,24 @@ class PostgresTripStore:
             ).fetchone()
         return inserted is not None
 
+    def put_trace_context(
+        self, trip_id: str, trace_headers: dict[str, str]
+    ) -> None:
+        if not trace_headers:
+            return
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO trip_trace_contexts (
+                    trip_id, trace_headers_json, updated_at
+                ) VALUES (%s, %s, NOW())
+                ON CONFLICT (trip_id) DO UPDATE
+                SET trace_headers_json = EXCLUDED.trace_headers_json,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (trip_id, Jsonb(trace_headers)),
+            )
+
     def claim_due_legs(
         self, *, now: datetime, maximum_legs: int, lease_seconds: int
     ) -> list[ScheduledLeg]:
@@ -339,6 +367,21 @@ class PostgresTripStore:
                 """,
                 (now, now, maximum_legs, lease_until),
             ).fetchall()
+            trip_ids = sorted({str(row["trip_id"]) for row in rows})
+            contexts: dict[str, dict[str, str]] = {}
+            if trip_ids:
+                trace_rows = connection.execute(
+                    """
+                    SELECT trip_id, trace_headers_json
+                    FROM trip_trace_contexts
+                    WHERE trip_id = ANY(%s)
+                    """,
+                    (trip_ids,),
+                ).fetchall()
+                contexts = {
+                    str(row["trip_id"]): dict(row["trace_headers_json"] or {})
+                    for row in trace_rows
+                }
         return [
             ScheduledLeg(
                 trip_id=row["trip_id"],
@@ -354,6 +397,7 @@ class PostgresTripStore:
                 # make the guarded UPDATE miss a freshly activated leg.
                 due_at=format_poll_identity(row["next_poll_at"]),
                 replay_key=f"scheduled:{row['trip_id']}:{row['leg_id']}",
+                trace_headers=contexts.get(str(row["trip_id"]), {}),
             )
             for row in rows
         ]

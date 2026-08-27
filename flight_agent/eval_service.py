@@ -12,6 +12,12 @@ import nats
 
 from fastapi import FastAPI, HTTPException
 
+from flight_agent.eval_reasoning import (
+    PROMPT_VERSION,
+    EvalReasoner,
+    advisory_record,
+    reasoner_from_environment,
+)
 from flight_agent.event_delivery import (
     EVAL_CONSUMER,
     EVENT_STREAM_NAME,
@@ -19,6 +25,7 @@ from flight_agent.event_delivery import (
     NOTIFICATION_CONSUMER,
     SEARCH_CONSUMER,
     confirmed_outbox,
+    consume_event_trace,
     decode_envelope,
     ensure_event_stream,
     fallback_event_id,
@@ -29,7 +36,12 @@ from flight_agent.event_delivery import (
     subscribe_durable,
 )
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
-from flight_agent.telemetry import hash_reference, install_telemetry_routes, traced
+from flight_agent.telemetry import (
+    configure_telemetry,
+    hash_reference,
+    install_telemetry_routes,
+    traced,
+)
 from travel_eval.policy import PolicyState, SuppressionPolicy
 
 
@@ -122,21 +134,28 @@ def commit_evaluation(
     episode_key: str,
     notified_band: int | None,
     store: MonitoringStore,
+    advisory: dict[str, Any] | None = None,
 ) -> None:
     atomic_commit = getattr(store, "commit_evaluation_with_outbox", None)
     if callable(atomic_commit):
-        atomic_commit(
+        arguments = dict(
             candidate_id=candidate_id,
             decision=decision,
             confirmed_event=confirmed_event,
             episode_key=episode_key,
             notified_band=notified_band,
         )
+        if advisory is not None:
+            arguments["advisory"] = advisory
+        atomic_commit(**arguments)
         return
     if confirmed_event is not None:
         store.put_confirmed_event(candidate_id, confirmed_event)
     if episode_key and notified_band is not None:
         store.put_policy_band(episode_key, notified_band)
+    advisory_writer = getattr(store, "put_eval_advisory", None)
+    if advisory is not None and callable(advisory_writer):
+        advisory_writer(candidate_id, advisory)
     # Written last so the Monitoring Agent only observes a fully committed result.
     store.put_decision(candidate_id, decision)
 
@@ -159,9 +178,12 @@ async def connect_nats(url: str, *, timeout_seconds: float = 30.0):
 def create_eval_app(
     store: MonitoringStore | None = None,
     policy: SuppressionPolicy | None = None,
+    reasoner: EvalReasoner | None = None,
 ) -> FastAPI:
+    configure_telemetry("eval-agent")
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
     resolved_policy = policy or load_policy()
+    resolved_reasoner = reasoner or reasoner_from_environment()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -195,7 +217,7 @@ def create_eval_app(
                 except TimeoutError:
                     continue
 
-        async def handle_candidate(message) -> None:
+        async def process_candidate_message(message) -> None:
             envelope = None
             try:
                 envelope = decode_envelope(
@@ -217,6 +239,13 @@ def create_eval_app(
                 if already_processed:
                     await message.ack_sync(timeout=3)
                     return
+                advisory = await asyncio.to_thread(
+                    advisory_record,
+                    resolved_reasoner,
+                    candidate,
+                    resolved_policy.policy,
+                    decision,
+                )
                 await asyncio.to_thread(
                     commit_evaluation,
                     candidate_id=candidate["candidate_id"],
@@ -225,6 +254,7 @@ def create_eval_app(
                     episode_key=episode_key,
                     notified_band=notified_band,
                     store=resolved_store,
+                    advisory=advisory,
                 )
                 if confirmed_event is not None:
                     record = confirmed_outbox(confirmed_event)
@@ -267,6 +297,14 @@ def create_eval_app(
                         error_code="EVALUATION_FAILED",
                     )
 
+        async def handle_candidate(message) -> None:
+            with consume_event_trace(
+                message,
+                service_name="eval-agent",
+                operation="messaging.consume.disruption_candidate",
+            ):
+                await process_candidate_message(message)
+
         subscription = await subscribe_durable(
             jetstream,
             subject=DISRUPTION_CANDIDATE_SUBJECT,
@@ -300,6 +338,19 @@ def create_eval_app(
             raise HTTPException(status_code=503, detail="Eval Agent is starting")
         return {"status": "ok"}
 
+    @app.get("/v1/evaluation/status", tags=["evaluation"])
+    async def evaluation_status() -> dict[str, Any]:
+        return {
+            "reasoning_mode": "shadow" if resolved_reasoner is not None else "off",
+            "prompt_version": PROMPT_VERSION,
+            "model": (
+                resolved_reasoner.model_name
+                if resolved_reasoner is not None
+                else None
+            ),
+            "authoritative_source": "deterministic_policy",
+        }
+
     def require_reliability_audit() -> None:
         if os.getenv("RELIABILITY_AUDIT_ENABLED", "false").lower() != "true":
             raise HTTPException(status_code=404, detail="Reliability audit is disabled")
@@ -320,6 +371,12 @@ def create_eval_app(
         )
         confirmed = await asyncio.to_thread(
             resolved_store.get_confirmed_event, candidate_id
+        )
+        advisory_reader = getattr(resolved_store, "get_eval_advisory", None)
+        advisory = (
+            await asyncio.to_thread(advisory_reader, candidate_id)
+            if callable(advisory_reader)
+            else None
         )
         decision_id = str(decision["decision_id"]) if decision else None
         notification = (
@@ -359,6 +416,7 @@ def create_eval_app(
             "candidate": candidate,
             "decision": decision,
             "confirmed_event": confirmed,
+            "eval_advisory": advisory,
             "notification": notification,
             "search": search,
             "outbox_pending": outboxes,

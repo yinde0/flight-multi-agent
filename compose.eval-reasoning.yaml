@@ -1,0 +1,11 @@
+services:
+  eval-agent:
+    environment:
+      EVAL_REASONING_MODE: shadow
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:?MISTRAL_API_KEY is required}
+    networks:
+      - travel-internal
+      - eval-reasoning-egress
+
+networks:
+  eval-reasoning-egress:

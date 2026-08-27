@@ -52,7 +52,7 @@ and [condition-code table](https://openweathermap.org/api/weather-conditions).
 
 ## Versioned policy behavior
 
-Policy `1.1.0` applies these rules:
+Policy `1.2.0` applies these rules:
 
 | Evidence | Eval result | Reason |
 |---|---|---|
@@ -113,5 +113,5 @@ argument.
 - Failed weather reads never overwrite `LAST_WEATHER`.
 - Unsupported airport codes fail weather lookup explicitly; they are not guessed.
 - A weather-only candidate can never create `disruption_confirmed` under policy
-  `1.1.0`.
+  `1.2.0`.
 - This slice still sends no notification and starts no rebooking search.

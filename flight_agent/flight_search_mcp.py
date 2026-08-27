@@ -19,6 +19,7 @@ from flight_agent.flight_search_contracts import (
     FlightSearchCommand,
     FlightSearchToolResult,
 )
+from flight_agent.telemetry import install_trace_middleware
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,3 +95,4 @@ async def reliability_audit(request: Request) -> JSONResponse:
 
 
 app = mcp.streamable_http_app()
+install_trace_middleware(app, service_name="flight-search-mcp")

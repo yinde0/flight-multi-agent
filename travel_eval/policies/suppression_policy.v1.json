@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "policy_version": "1.1.0",
+  "policy_version": "1.2.0",
   "effective_from": "2026-08-25T00:00:00Z",
   "description": "Deterministic flight-impact policy with advisory weather corroboration.",
   "thresholds": {
@@ -44,9 +44,15 @@
     },
     {
       "rule_id": "P006",
-      "when": "category in [GATE_CHANGE, TERMINAL_CHANGE]",
+      "when": "category == GATE_CHANGE",
       "verdict": "SUPPRESS",
-      "reason_code": "LOCATION_ONLY_CHANGE"
+      "reason_code": "GATE_ONLY_CHANGE"
+    },
+    {
+      "rule_id": "P006B",
+      "when": "category == TERMINAL_CHANGE",
+      "verdict": "SUPPRESS",
+      "reason_code": "TERMINAL_ONLY_CHANGE"
     },
     {
       "rule_id": "P007",

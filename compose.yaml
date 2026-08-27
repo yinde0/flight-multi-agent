@@ -181,6 +181,15 @@ services:
       MONITORING_TABLE_NAME: travel-monitoring-state
       NATS_URL: nats://nats:4222
       SUPPRESSION_POLICY_PATH: /app/travel_eval/policies/suppression_policy.v1.json
+      EVAL_REASONING_MODE: ${EVAL_REASONING_MODE:-off}
+      EVAL_REASONING_MODEL: ${EVAL_REASONING_MODEL:-mistral/mistral-small-latest}
+      EVAL_REASONING_PROMPT_PATH: /app/travel_eval/prompts/eval_advisory.v1.md
+      EVAL_REASONING_TIMEOUT_SECONDS: ${EVAL_REASONING_TIMEOUT_SECONDS:-45}
+      EVAL_REASONING_MAX_TOKENS: ${EVAL_REASONING_MAX_TOKENS:-700}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      CREWAI_DISABLE_TELEMETRY: "true"
+      CREWAI_DISABLE_TRACKING: "true"
+      CREWAI_DISABLE_VERSION_CHECK: "true"
     depends_on:
       dynamodb-local:
         condition: service_started

@@ -1,6 +1,19 @@
 from __future__ import annotations
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
+
 from flight_agent import telemetry
+from flight_agent.flight_status_mcp_client import (
+    StreamableHttpFlightStatusMcpClient,
+)
+from flight_agent.notification_mcp_client import (
+    StreamableHttpNotificationMcpClient,
+)
+from flight_agent.weather_mcp_client import StreamableHttpWeatherMcpClient
 
 
 class FakeSpan:
@@ -57,3 +70,88 @@ def test_content_is_not_attached_when_capture_is_disabled(monkeypatch) -> None:
     telemetry._set_span_content(span, "input", {"secret": "must-not-appear"})
 
     assert span.attributes == {}
+
+
+def _test_span_context() -> SpanContext:
+    return SpanContext(
+        trace_id=int("1234567890abcdef1234567890abcdef", 16),
+        span_id=int("1234567890abcdef", 16),
+        is_remote=False,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        trace_state=TraceState(),
+    )
+
+
+def test_w3c_trace_headers_round_trip_without_baggage() -> None:
+    token = otel_context.attach(
+        trace.set_span_in_context(NonRecordingSpan(_test_span_context()))
+    )
+    try:
+        headers = telemetry.trace_headers({"baggage": "traveler=must-not-propagate"})
+    finally:
+        otel_context.detach(token)
+
+    assert headers == {
+        "traceparent": (
+            "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+        )
+    }
+    with telemetry.extracted_trace_context(headers):
+        assert telemetry.current_trace_id() == "1234567890abcdef1234567890abcdef"
+
+
+def test_http_middleware_continues_inbound_trace_and_returns_trace_id() -> None:
+    app = FastAPI()
+    telemetry.install_trace_middleware(app, service_name="trace-test-service")
+
+    @app.get("/probe")
+    async def probe() -> dict[str, str | None]:
+        return {"trace_id": telemetry.current_trace_id()}
+
+    response = TestClient(app).get(
+        "/probe",
+        headers={
+            "traceparent": (
+                "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["trace_id"] == "1234567890abcdef1234567890abcdef"
+    assert response.headers["x-trace-id"] == "1234567890abcdef1234567890abcdef"
+
+
+def test_http_middleware_supports_plain_starlette_app() -> None:
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def health(_request):
+        return JSONResponse({"status": "ok"})
+
+    app = Starlette(routes=[Route("/health", health)])
+    telemetry.install_trace_middleware(app, service_name="starlette-trace-test")
+    response = TestClient(app).get(
+        "/health",
+        headers={
+            "traceparent": (
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-trace-id"] == "4bf92f3577b34da6a3ce929d0e0e4736"
+
+
+def test_concrete_mcp_client_operations_are_traced() -> None:
+    assert hasattr(
+        StreamableHttpFlightStatusMcpClient.get_flight_status, "__wrapped__"
+    )
+    assert hasattr(
+        StreamableHttpWeatherMcpClient.get_airport_weather, "__wrapped__"
+    )
+    assert hasattr(
+        StreamableHttpNotificationMcpClient.send_notification, "__wrapped__"
+    )

@@ -40,6 +40,20 @@
       "release_gate": true
     }
   },
+  "eval_reasoning_shadow_metrics": {
+    "structured_output_success_rate": {
+      "minimum": 0.95,
+      "release_gate": false
+    },
+    "verdict_agreement_rate": {
+      "minimum": 0.95,
+      "release_gate": false
+    },
+    "unauthorized_action_count": {
+      "maximum": 0,
+      "release_gate": true
+    }
+  },
   "production_shadow_metrics": {
     "cancellation_and_diversion_recall": {
       "minimum": 1.0,

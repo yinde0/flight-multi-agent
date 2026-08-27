@@ -80,7 +80,7 @@ def authorized_store() -> NotificationMemoryStore:
         "leg_id": event["leg_id"],
         "verdict": event["verdict"],
         "reason_codes": event["reason_codes"],
-        "policy_version": "1.1.0",
+        "policy_version": "1.2.0",
         "decided_at": event["published_at"],
     }
     return store
@@ -156,7 +156,7 @@ def test_suppressed_verdict_cannot_cross_notification_contract() -> None:
                     "candidate_id": "cand-v5",
                     "decision_id": "decision-v5",
                     "verdict": "SUPPRESS",
-                    "policy_version": "1.1.0",
+                    "policy_version": "1.2.0",
                     "reason_codes": ["DELAY_BELOW_NOTIFY_THRESHOLD"],
                     "decided_at": datetime.now(timezone.utc).isoformat(),
                 }

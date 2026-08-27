@@ -7,12 +7,14 @@ from typing import Protocol
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp.types import TextContent
 
 from flight_agent.monitoring_contracts import (
     LiveFlightSample,
     ProviderFlightObservation,
 )
+from flight_agent.telemetry import trace_headers, traced
 
 
 class FlightStatusGateway(Protocol):
@@ -31,6 +33,11 @@ class StreamableHttpFlightStatusMcpClient:
     def __init__(self, url: str) -> None:
         self._url = url
 
+    @traced(
+        "mcp.get_flight_status",
+        service_name="monitor-agent",
+        kind="tool",
+    )
     def get_flight_status(
         self,
         *,
@@ -50,6 +57,11 @@ class StreamableHttpFlightStatusMcpClient:
         )
         return ProviderFlightObservation.model_validate(payload)
 
+    @traced(
+        "mcp.discover_live_flight_sample",
+        service_name="monitor-agent",
+        kind="tool",
+    )
     def discover_live_flight_sample(self, *, limit: int = 10) -> LiveFlightSample:
         payload = asyncio.run(
             self._call_tool("discover_live_flight_sample", {"limit": limit})
@@ -57,14 +69,13 @@ class StreamableHttpFlightStatusMcpClient:
         return LiveFlightSample.model_validate(payload)
 
     async def _call_tool(self, name: str, arguments: dict) -> dict:
-        async with streamable_http_client(self._url) as (
-            read_stream,
-            write_stream,
-            _,
-        ):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                result = await session.call_tool(name, arguments=arguments)
+        async with create_mcp_http_client(headers=trace_headers()) as http_client:
+            async with streamable_http_client(
+                self._url, http_client=http_client
+            ) as (read_stream, write_stream, _):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.call_tool(name, arguments=arguments)
 
         if result.isError:
             raise RuntimeError("Flight-status MCP tool returned an error")

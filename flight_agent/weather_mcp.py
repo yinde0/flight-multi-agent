@@ -6,6 +6,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from flight_agent.monitoring_contracts import ProviderWeatherObservation
+from flight_agent.telemetry import install_trace_middleware
 from flight_agent.weather import provider_from_environment
 
 
@@ -58,3 +59,4 @@ async def health(request: Request) -> JSONResponse:
 
 
 app = mcp.streamable_http_app()
+install_trace_middleware(app, service_name="weather-mcp")

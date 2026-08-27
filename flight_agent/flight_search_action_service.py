@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from flight_agent.event_delivery import (
     DISRUPTION_CONFIRMED_SUBJECT,
     SEARCH_CONSUMER,
+    consume_event_trace,
     decode_envelope,
     ensure_event_stream,
     fallback_event_id,
@@ -186,7 +187,7 @@ def create_flight_search_action_app(
         jetstream = connection.jetstream()
         await ensure_event_stream(jetstream)
 
-        async def handle_confirmed(message) -> None:
+        async def process_confirmed_message(message) -> None:
             envelope = None
             try:
                 envelope = decode_envelope(
@@ -244,6 +245,14 @@ def create_flight_search_action_app(
                         payload=envelope.payload,
                         error_code="SEARCH_ACTION_FAILED",
                     )
+
+        async def handle_confirmed(message) -> None:
+            with consume_event_trace(
+                message,
+                service_name="flight-search-action-service",
+                operation="messaging.consume.disruption_confirmed",
+            ):
+                await process_confirmed_message(message)
 
         subscription = await subscribe_durable(
             jetstream,

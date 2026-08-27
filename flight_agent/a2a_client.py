@@ -8,6 +8,7 @@ from typing import Any, Protocol
 import httpx
 
 from flight_agent.contracts import DocumentMetadata, ParseOutcome
+from flight_agent.telemetry import trace_headers
 
 
 class DocumentAgentGateway(Protocol):
@@ -45,7 +46,10 @@ class A2ADocumentAgentClient:
     async def parse(
         self, document_bytes: bytes, metadata: DocumentMetadata
     ) -> ParseOutcome:
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=self.timeout_seconds,
+            headers=trace_headers(),
+        ) as client:
             jsonrpc_url = await self._jsonrpc_url(client)
             request_id = str(uuid.uuid4())
             response = await client.post(

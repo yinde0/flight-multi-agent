@@ -105,7 +105,7 @@ def authorized_store(verdict: str = "NOTIFY_AND_SEARCH") -> SearchMemoryStore:
         "leg_id": event["leg_id"],
         "verdict": event["verdict"],
         "reason_codes": event["reason_codes"],
-        "policy_version": "1.1.0",
+        "policy_version": "1.2.0",
         "decided_at": event["published_at"],
     }
     store.observations[store.leg_key(event["trip_id"], event["leg_id"])] = {
@@ -136,7 +136,7 @@ def duffel_command() -> FlightSearchCommand:
             candidate_id="cand-duffel-001",
             decision_id="decision-duffel-001",
             verdict="NOTIFY_AND_SEARCH",
-            policy_version="1.1.0",
+            policy_version="1.2.0",
             reason_codes=["FLIGHT_CANCELLED"],
             decided_at="2026-09-15T06:05:00Z",
         ),
@@ -239,7 +239,7 @@ def test_notify_verdict_cannot_cross_search_command_contract() -> None:
                 "candidate_id": "cand-v6",
                 "decision_id": "decision-v6",
                 "verdict": "NOTIFY",
-                "policy_version": "1.1.0",
+                "policy_version": "1.2.0",
                 "reason_codes": ["DELAY_NOTIFY_THRESHOLD"],
                 "decided_at": "2026-09-15T06:05:00Z",
             }

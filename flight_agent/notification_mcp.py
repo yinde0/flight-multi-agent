@@ -14,6 +14,7 @@ from flight_agent.notification_contracts import (
     NotificationCommand,
     NotificationReceipt,
 )
+from flight_agent.telemetry import install_trace_middleware
 
 
 provider = RecordingNotificationProvider()
@@ -108,3 +109,4 @@ async def notification_failure_mode(request: Request) -> JSONResponse:
 
 
 app = mcp.streamable_http_app()
+install_trace_middleware(app, service_name="notification-mcp")

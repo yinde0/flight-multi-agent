@@ -3,12 +3,12 @@
     "candidate_id": "cand-gate-churn-001",
     "verdict": "SUPPRESS",
     "reason_codes": ["GATE_ONLY_CHANGE"],
-    "policy_version": "1.1.0"
+    "policy_version": "1.2.0"
   },
   {
     "candidate_id": "cand-gate-churn-002",
     "verdict": "SUPPRESS",
     "reason_codes": ["GATE_ONLY_CHANGE"],
-    "policy_version": "1.1.0"
+    "policy_version": "1.2.0"
   }
 ]

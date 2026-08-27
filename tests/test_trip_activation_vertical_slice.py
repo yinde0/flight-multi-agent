@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
 
 from flight_agent.contracts import DocumentMetadata, ParseOutcome
 from flight_agent.document_store import S3DocumentStore
@@ -29,6 +32,7 @@ from flight_agent.trip_orchestrator import (
     TripOrchestrator,
 )
 from flight_agent.trip_store import format_poll_identity, format_timestamp, next_poll_time
+from flight_agent.telemetry import current_trace_id
 from travel_eval.clock import parse_timestamp
 
 
@@ -103,9 +107,11 @@ class ReviewGateway:
 class SequenceMonitoringGateway:
     def __init__(self) -> None:
         self.calls: list[MonitoringPollRequest] = []
+        self.trace_ids: list[str | None] = []
 
     async def poll(self, request: MonitoringPollRequest) -> MonitoringPollOutcome:
         self.calls.append(request)
+        self.trace_ids.append(current_trace_id())
         if len(self.calls) == 1:
             return MonitoringPollOutcome(
                 status="baseline_stored",
@@ -133,6 +139,7 @@ class MemoryTripStore:
     def __init__(self) -> None:
         self.trips: dict[str, StoredTripView] = {}
         self.scheduled: dict[tuple[str, str], dict[str, Any]] = {}
+        self.trace_contexts: dict[str, dict[str, str]] = {}
 
     def ensure_schema(self) -> None:
         return None
@@ -199,6 +206,9 @@ class MemoryTripStore:
         )
         return True
 
+    def put_trace_context(self, trip_id, trace_headers):
+        self.trace_contexts[trip_id] = dict(trace_headers)
+
     def claim_due_legs(self, *, now, maximum_legs, lease_seconds):
         claimed = []
         for trip_id in sorted(self.trips):
@@ -224,6 +234,7 @@ class MemoryTripStore:
                         scheduled_arrival_at=state["arrival"],
                         due_at=leg.next_poll_at,
                         replay_key=f"scheduled:{trip_id}:{leg.leg_id}",
+                        trace_headers=self.trace_contexts.get(trip_id, {}),
                     )
                 )
                 if len(claimed) >= maximum_legs:
@@ -343,6 +354,46 @@ def test_review_required_document_is_stored_but_never_scheduled() -> None:
     assert activation.trip_status == "review_required"
     assert activation.active_leg_count == 0
     assert tick.claimed_count == 0
+
+
+def test_activation_trace_context_is_restored_for_later_scheduled_poll() -> None:
+    content = PDF.read_bytes()
+    trips = MemoryTripStore()
+    monitoring = SequenceMonitoringGateway()
+    orchestrator = TripOrchestrator(
+        document_agent=ParsingGateway(),
+        monitoring_agent=monitoring,
+        document_store=MemoryDocumentStore(),
+        trip_store=trips,
+    )
+    span_context = SpanContext(
+        trace_id=int("99999999999999999999999999999999", 16),
+        span_id=int("2222222222222222", 16),
+        is_remote=False,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        trace_state=TraceState(),
+    )
+    token = otel_context.attach(
+        trace.set_span_in_context(NonRecordingSpan(span_context))
+    )
+    try:
+        asyncio.run(
+            orchestrator.activate_trip(
+                content,
+                metadata("trip-v10-trace", content),
+                activated_at=datetime(2026, 9, 15, 6, tzinfo=timezone.utc),
+            )
+        )
+    finally:
+        otel_context.detach(token)
+
+    assert trips.trace_contexts["trip-v10-trace"]["traceparent"].startswith(
+        "00-99999999999999999999999999999999-"
+    )
+    asyncio.run(
+        orchestrator.tick(SchedulerTickRequest(now="2026-09-15T06:00:00Z"))
+    )
+    assert monitoring.trace_ids == ["99999999999999999999999999999999"]
 
 
 def test_virtual_scheduler_survives_restart_without_duplicate_poll() -> None:

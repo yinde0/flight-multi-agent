@@ -58,5 +58,13 @@
 | F54 | A traceable operation handles traveler or document evidence | Export only outcome and hashed references | Raw reference absent; content capture forced false | Automated unit |
 | F55 | Development content flag is accidentally set in production | Force content capture off | No prompt, input, or output attributes attached | Automated unit |
 | F56 | Explicit development content tracing uses a synthetic document | Show flow instruction, input, and canonical output | `document.parse` has non-empty LangSmith inputs and outputs | Automated unit + networked LangSmith runner |
+| F57 | A scheduled poll runs after activation or process restart | Restore the trip's persisted W3C carrier | Scheduler and activation spans share one trace ID | Automated unit + networked vertical-10 runner |
+| F58 | An outbox publish fails and later retries | Reuse the persisted trace carrier | Retried publish remains in the originating trace | Automated unit |
+| F59 | Incoming trace headers are absent or malformed | Start a valid new trace without affecting business work | Request succeeds; returned trace ID is valid | Automated middleware unit |
+| F60 | Incoming baggage contains traveler metadata | Do not propagate baggage to A2A, MCP, or messaging boundaries | Outgoing carrier contains only `traceparent` and optional `tracestate` | Automated unit |
+| F61 | CrewAI or Mistral times out or is unavailable | Record advisory failure and retain deterministic decision | Authoritative verdict and action path are unchanged | Automated unit |
+| F62 | CrewAI returns malformed, wrapped, or schema-invalid output | Reject the advisory | `EVAL_REASONING_FAILED`; no model-authorized action | Automated unit |
+| F63 | CrewAI recommendation disagrees with deterministic policy | Store disagreement for evaluation only | Persisted authoritative decision remains deterministic | Automated unit + golden shadow runner |
+| F64 | A confirmed event or scheduler tick is duplicated while shadow reasoning is enabled | Apply existing idempotency controls | One notification and one search provider consequence | Automated unit + networked vertical-10 runner |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

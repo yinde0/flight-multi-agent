@@ -5,8 +5,9 @@ import hashlib
 import json
 import os
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
 from nats.js import errors as js_errors
 from nats.js.api import (
@@ -17,6 +18,12 @@ from nats.js.api import (
     StreamConfig,
 )
 from pydantic import BaseModel, ConfigDict, Field
+
+from flight_agent.telemetry import (
+    extracted_trace_context,
+    trace_headers,
+    trace_operation,
+)
 
 
 EVENT_STREAM_NAME = "TRAVEL_DISRUPTIONS_V1"
@@ -55,14 +62,20 @@ def outbox_record(
     subject: str,
     occurred_at: str,
     payload: dict[str, Any],
+    producer_service: str,
 ) -> dict[str, Any]:
-    return {
+    record = {
         "event_id": event_id,
         "event_type": event_type,
         "subject": subject,
         "occurred_at": occurred_at,
         "payload": payload,
+        "producer_service": producer_service,
     }
+    active_headers = trace_headers()
+    if active_headers:
+        record["trace_headers"] = active_headers
+    return record
 
 
 def candidate_outbox(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -72,6 +85,7 @@ def candidate_outbox(candidate: dict[str, Any]) -> dict[str, Any]:
         subject=DISRUPTION_CANDIDATE_SUBJECT,
         occurred_at=str(candidate["observed_at"]),
         payload=candidate,
+        producer_service="monitor-agent",
     )
 
 
@@ -82,6 +96,7 @@ def confirmed_outbox(event: dict[str, Any]) -> dict[str, Any]:
         subject=DISRUPTION_CONFIRMED_SUBJECT,
         occurred_at=str(event["published_at"]),
         payload=event,
+        producer_service="eval-agent",
     )
 
 
@@ -148,13 +163,29 @@ async def publish_durable_event(
         occurred_at=str(record["occurred_at"]),
         payload=dict(record["payload"]),
     )
-    return await jetstream.publish(
-        str(record["subject"]),
-        envelope.model_dump_json(exclude_none=True).encode("utf-8"),
-        stream=EVENT_STREAM_NAME,
-        headers={"Nats-Msg-Id": message_id or envelope.event_id},
-        timeout=float(os.getenv("EVENT_PUBLISH_TIMEOUT_SECONDS", "5")),
-    )
+    producer_service = str(record.get("producer_service") or "event-publisher")
+    stored_headers = record.get("trace_headers")
+    with extracted_trace_context(
+        stored_headers if isinstance(stored_headers, dict) else None
+    ):
+        with trace_operation(
+            "messaging.publish",
+            service_name=producer_service,
+            kind="tool",
+            attributes={
+                "messaging.system": "nats",
+                "messaging.destination.name": str(record["subject"]),
+            },
+        ):
+            headers = {"Nats-Msg-Id": message_id or envelope.event_id}
+            headers.update(trace_headers())
+            return await jetstream.publish(
+                str(record["subject"]),
+                envelope.model_dump_json(exclude_none=True).encode("utf-8"),
+                stream=EVENT_STREAM_NAME,
+                headers=headers,
+                timeout=float(os.getenv("EVENT_PUBLISH_TIMEOUT_SECONDS", "5")),
+            )
 
 
 def decode_envelope(message, *, expected_type: EventType) -> DurableEventEnvelope:
@@ -170,6 +201,29 @@ def delivery_attempt(message) -> int:
         return max(1, int(message.metadata.num_delivered))
     except Exception:
         return 1
+
+
+@contextmanager
+def consume_event_trace(
+    message,
+    *,
+    service_name: str,
+    operation: str,
+) -> Iterator[None]:
+    """Continue a producer trace for one JetStream delivery or redelivery."""
+
+    headers = getattr(message, "headers", None)
+    with extracted_trace_context(headers if hasattr(headers, "items") else None):
+        with trace_operation(
+            operation,
+            service_name=service_name,
+            kind="chain",
+            attributes={
+                "messaging.system": "nats",
+                "messaging.delivery.attempt": delivery_attempt(message),
+            },
+        ):
+            yield
 
 
 def fallback_event_id(message) -> str:

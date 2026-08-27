@@ -28,6 +28,7 @@ from flight_agent.trip_orchestrator_client import (
     HttpTripOrchestratorClient,
     TripOrchestratorGateway,
 )
+from flight_agent.telemetry import install_telemetry_routes
 
 
 MAX_PDF_BYTES = 5 * 1024 * 1024
@@ -40,6 +41,7 @@ def create_api_app(
     scheduler_control_enabled: bool | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Travel Orchestration API", version="0.2.0")
+    install_telemetry_routes(app, service_name="travel-api")
     app.state.document_gateway = gateway or A2ADocumentAgentClient(
         os.getenv("DOCUMENT_AGENT_URL", "http://127.0.0.1:8001")
     )

@@ -27,6 +27,22 @@ services:
       otel-collector:
         condition: service_started
 
+  travel-api:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  trip-orchestrator:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_started
+
   monitor-agent:
     environment:
       OTEL_TRACING_ENABLED: "true"
@@ -40,6 +56,7 @@ services:
     environment:
       OTEL_TRACING_ENABLED: "true"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      CREWAI_OTEL_ENABLED: "true"
       TRACELOOP_TRACE_CONTENT: "false"
     depends_on:
       otel-collector:
@@ -62,6 +79,45 @@ services:
     depends_on:
       otel-collector:
         condition: service_started
+
+  flight-status-mcp:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  weather-mcp:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  notification-mcp:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_started
+    networks:
+      - notification-internal
+      - travel-internal
+
+  flight-search-mcp:
+    environment:
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      otel-collector:
+        condition: service_started
+    networks:
+      - search-internal
+      - search-egress
+      - travel-internal
 
   operations-service:
     environment:

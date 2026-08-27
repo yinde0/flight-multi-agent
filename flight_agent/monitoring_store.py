@@ -63,6 +63,12 @@ class MonitoringStore(Protocol):
 
     def put_decision(self, candidate_id: str, decision: dict[str, Any]) -> None: ...
 
+    def get_eval_advisory(self, candidate_id: str) -> dict[str, Any] | None: ...
+
+    def put_eval_advisory(
+        self, candidate_id: str, advisory: dict[str, Any]
+    ) -> None: ...
+
     def get_confirmed_event(self, candidate_id: str) -> dict[str, Any] | None: ...
 
     def put_confirmed_event(
@@ -85,6 +91,7 @@ class MonitoringStore(Protocol):
         confirmed_event: dict[str, Any] | None,
         episode_key: str,
         notified_band: int | None,
+        advisory: dict[str, Any] | None = None,
     ) -> None: ...
 
     def list_outbox(
@@ -390,6 +397,16 @@ class DynamoMonitoringStateStore:
     def put_decision(self, candidate_id: str, decision: dict[str, Any]) -> None:
         self._put(f"CANDIDATE#{candidate_id}", "DECISION", decision)
 
+    def get_eval_advisory(self, candidate_id: str) -> dict[str, Any] | None:
+        return self._payload(
+            self._get(f"CANDIDATE#{candidate_id}", "EVAL_ADVISORY")
+        )
+
+    def put_eval_advisory(
+        self, candidate_id: str, advisory: dict[str, Any]
+    ) -> None:
+        self._put(f"CANDIDATE#{candidate_id}", "EVAL_ADVISORY", advisory)
+
     def commit_evaluation_with_outbox(
         self,
         *,
@@ -398,6 +415,7 @@ class DynamoMonitoringStateStore:
         confirmed_event: dict[str, Any] | None,
         episode_key: str,
         notified_band: int | None,
+        advisory: dict[str, Any] | None = None,
     ) -> None:
         items: list[dict[str, Any]] = []
         if confirmed_event is not None:
@@ -418,6 +436,16 @@ class DynamoMonitoringStateStore:
                         "sk": "HIGHEST_NOTIFIED_BAND",
                         "band": notified_band,
                     }
+                )
+            )
+        if advisory is not None:
+            items.append(
+                self._transaction_put(
+                    self._payload_item(
+                        f"CANDIDATE#{candidate_id}",
+                        "EVAL_ADVISORY",
+                        advisory,
+                    )
                 )
             )
         items.append(

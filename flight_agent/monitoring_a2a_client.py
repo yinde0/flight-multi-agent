@@ -10,6 +10,7 @@ from flight_agent.monitoring_contracts import (
     MonitoringPollOutcome,
     MonitoringPollRequest,
 )
+from flight_agent.telemetry import trace_headers
 
 
 class MonitoringAgentGateway(Protocol):
@@ -39,7 +40,10 @@ class A2AMonitoringAgentClient:
         raise RuntimeError("Monitoring Agent has no A2A JSON-RPC 1.0 interface")
 
     async def poll(self, request: MonitoringPollRequest) -> MonitoringPollOutcome:
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout_seconds,
+            headers=trace_headers(),
+        ) as client:
             jsonrpc_url = await self._jsonrpc_url(client)
             request_id = str(uuid.uuid4())
             response = await client.post(

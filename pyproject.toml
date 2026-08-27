@@ -16,7 +16,7 @@ test = ["pytest>=8,<9"]
 app = [
   "a2a-sdk[fastapi]>=1.0.3,<2",
   "boto3>=1.35,<2",
-  "crewai>=1.15.17,<2",
+  "crewai[litellm]>=1.15.17,<2",
   "fastapi>=0.115.2,<1",
   "httpx>=0.28.1,<1",
   "mcp>=1.28.1,<2",
@@ -41,5 +41,6 @@ travel_eval = [
   "acceptance_thresholds.json",
   "schemas/*.json",
   "policies/*.json",
+  "prompts/*.md",
   "fixtures/**/*.json"
 ]

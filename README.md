@@ -217,6 +217,45 @@ For prompt/input/output inspection during development, stack
 `development` deployment environment and should be used only with synthetic or
 redacted evidence.
 
+## Distributed trace correlation
+
+Vertical slice 10 carries one W3C trace across HTTP/A2A, persisted scheduler
+work, MCP calls, transactional outboxes, and JetStream consumers. The trace
+context is persisted with the trip and each outbox so a later scheduler tick or
+publication retry retains its lineage. Baggage is not propagated, and trace
+metadata never grants action authority.
+
+Run the synthetic activation-to-action proof against the configured LangSmith
+project:
+
+```powershell
+docker compose -f compose.yaml -f compose.langsmith.yaml -f compose.langsmith-development.yaml -f compose.eval-reasoning.yaml -f compose.trace-test.yaml up -d --build --wait --remove-orphans
+.\.venv\Scripts\python.exe tools\run_langsmith_end_to_end_trace.py
+docker compose -f compose.yaml up -d --wait --remove-orphans
+```
+
+The runner requires all HTTP, document, scheduler, monitoring, MCP, event,
+evaluation, notification, and search spans in one trace. It also proves duplicate
+ticks create no second notification or search. See
+[docs/vertical-slice-10.md](docs/vertical-slice-10.md).
+
+## CrewAI Eval shadow reasoning
+
+Vertical slice 11 adds a tool-free CrewAI/Mistral reviewer after the deterministic
+Eval policy. It receives only allowlisted disruption evidence and returns a strict
+Pydantic advisory. The model cannot change the stored verdict or call an action;
+failures and disagreements are audit evidence only.
+
+Run all golden decisions through the real model:
+
+```powershell
+.\.venv\Scripts\python.exe tools\run_vertical_eval_reasoning_test.py
+```
+
+Normal Compose keeps reasoning off. `compose.eval-reasoning.yaml` explicitly
+enables shadow mode and requires `MISTRAL_API_KEY`. See
+[docs/vertical-slice-11.md](docs/vertical-slice-11.md).
+
 ## What is included
 
 - Canonical JSON Schemas for itineraries, observations, deltas, disruption candidates, decisions, approved notification actions, and authorized read-only searches.
@@ -228,6 +267,9 @@ redacted evidence.
 - Release metrics and acceptance thresholds.
 - A failure and chaos-test matrix covering implemented and planned infrastructure
   behavior.
+- End-to-end W3C trace correlation across delayed and durable work.
+- A versioned, schema-constrained CrewAI/Mistral Eval advisory with golden
+  agreement metrics and no action authority.
 
 ## Run the evaluation
 
@@ -289,4 +331,6 @@ Trip activation uses an RDS-compatible
 Postgres adapter and an S3-compatible document adapter; Docker supplies local
 Postgres and MinIO instances. The capability MCPs are reachable only from their
 post-evaluation action services, and `NOTIFY_AND_SEARCH` is never interpreted as
-permission to purchase, hold, exchange, or cancel travel.
+permission to purchase, hold, exchange, or cancel travel. Optional distributed
+tracing and CrewAI shadow review observe these boundaries without moving decision
+authority out of the deterministic policy.

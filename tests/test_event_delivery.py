@@ -7,17 +7,22 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
 
 from flight_agent.eval_service import commit_evaluation
 from flight_agent.event_delivery import (
     DISRUPTION_CANDIDATE_SUBJECT,
     DurableEventEnvelope,
     candidate_outbox,
+    consume_event_trace,
     decode_envelope,
     publish_durable_event,
     publish_pending_outbox,
     retry_or_quarantine,
 )
+from flight_agent.telemetry import current_trace_id
 
 
 def candidate() -> dict[str, Any]:
@@ -51,6 +56,46 @@ def test_durable_publish_wraps_payload_and_sets_deduplication_header() -> None:
     envelope = DurableEventEnvelope.model_validate_json(call["payload"])
     assert envelope.event_type == "disruption_candidate"
     assert envelope.payload == candidate()
+
+
+def test_outbox_retry_preserves_w3c_trace_lineage() -> None:
+    span_context = SpanContext(
+        trace_id=int("abcdefabcdefabcdefabcdefabcdefab", 16),
+        span_id=int("1111111111111111", 16),
+        is_remote=False,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        trace_state=TraceState(),
+    )
+    token = otel_context.attach(
+        trace.set_span_in_context(NonRecordingSpan(span_context))
+    )
+    try:
+        record = candidate_outbox(candidate())
+    finally:
+        otel_context.detach(token)
+
+    assert record["trace_headers"]["traceparent"].startswith(
+        "00-abcdefabcdefabcdefabcdefabcdefab-"
+    )
+    jetstream = FakeJetStream()
+    asyncio.run(publish_durable_event(jetstream, record))
+    published = jetstream.calls[0]["headers"]
+    assert published["traceparent"].startswith(
+        "00-abcdefabcdefabcdefabcdefabcdefab-"
+    )
+    assert published["Nats-Msg-Id"] == "cand-v8-unit"
+
+    message = SimpleNamespace(
+        data=b"{}",
+        headers=published,
+        metadata=SimpleNamespace(num_delivered=2),
+    )
+    with consume_event_trace(
+        message,
+        service_name="eval-agent",
+        operation="messaging.consume.disruption_candidate",
+    ):
+        assert current_trace_id() == "abcdefabcdefabcdefabcdefabcdefab"
 
 
 def test_decode_rejects_event_on_the_wrong_consumer() -> None:
@@ -158,6 +203,31 @@ def test_eval_uses_one_atomic_decision_and_outbox_commit() -> None:
         "episode_key": "trip:leg:CANCELLATION",
         "notified_band": 3,
     }
+
+
+def test_eval_advisory_is_included_in_atomic_commit_without_becoming_authority() -> None:
+    store = AtomicEvalStore()
+    decision = {"decision_id": "decision-v8-unit", "verdict": "NOTIFY"}
+    advisory = {
+        "status": "disagreed",
+        "policy_verdict": "NOTIFY",
+        "advisory": {"recommended_verdict": "SUPPRESS"},
+        "authoritative_source": "deterministic_policy",
+    }
+
+    commit_evaluation(
+        candidate_id="cand-v8-unit",
+        decision=decision,
+        confirmed_event={"decision_id": "decision-v8-unit"},
+        episode_key="trip:leg:DELAY",
+        notified_band=2,
+        store=store,
+        advisory=advisory,
+    )
+
+    assert store.atomic is not None
+    assert store.atomic["advisory"] == advisory
+    assert store.atomic["decision"]["verdict"] == "NOTIFY"
 
 
 class RetryMessage:

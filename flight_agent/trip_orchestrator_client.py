@@ -11,6 +11,7 @@ from flight_agent.trip_contracts import (
     StoredTripView,
     TripActivationOutcome,
 )
+from flight_agent.telemetry import trace_headers
 
 
 class TripOrchestratorGateway(Protocol):
@@ -45,7 +46,10 @@ class HttpTripOrchestratorClient:
         traveler_ref: str,
         fixture_id: str,
     ) -> TripActivationOutcome:
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout_seconds,
+            headers=trace_headers(),
+        ) as client:
             response = await client.post(
                 f"{self._base_url}/v1/trips/activate",
                 files={"file": (filename, document_bytes, "application/pdf")},
@@ -59,13 +63,19 @@ class HttpTripOrchestratorClient:
             return TripActivationOutcome.model_validate(response.json())
 
     async def get_trip(self, trip_id: str) -> StoredTripView:
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout_seconds,
+            headers=trace_headers(),
+        ) as client:
             response = await client.get(f"{self._base_url}/v1/trips/{trip_id}")
             response.raise_for_status()
             return StoredTripView.model_validate(response.json())
 
     async def document_status(self, trip_id: str) -> DocumentStorageStatus:
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout_seconds,
+            headers=trace_headers(),
+        ) as client:
             response = await client.get(
                 f"{self._base_url}/v1/trips/{trip_id}/document-status"
             )
@@ -73,7 +83,10 @@ class HttpTripOrchestratorClient:
             return DocumentStorageStatus.model_validate(response.json())
 
     async def tick(self, request: SchedulerTickRequest) -> SchedulerTickOutcome:
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=self._timeout_seconds,
+            headers=trace_headers(),
+        ) as client:
             response = await client.post(
                 f"{self._base_url}/v1/scheduler/tick",
                 json=request.model_dump(mode="json"),

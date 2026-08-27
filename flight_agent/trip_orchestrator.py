@@ -26,6 +26,13 @@ from flight_agent.trip_contracts import (
     TripActivationOutcome,
 )
 from flight_agent.trip_store import PostgresTripStore, TripStore, format_timestamp
+from flight_agent.telemetry import (
+    extracted_trace_context,
+    hash_reference,
+    install_telemetry_routes,
+    trace_headers,
+    trace_operation,
+)
 from travel_eval.clock import parse_timestamp
 
 
@@ -91,6 +98,7 @@ class TripOrchestrator:
         *,
         activated_at: datetime | None = None,
     ) -> TripActivationOutcome:
+        activation_trace_headers = trace_headers()
         existing = await asyncio.to_thread(self._trip_store.get_trip, metadata.trip_id)
         if existing is not None:
             if (
@@ -131,6 +139,14 @@ class TripOrchestrator:
                 created_at=now,
             )
 
+        trace_writer = getattr(self._trip_store, "put_trace_context", None)
+        if inserted and activation_trace_headers and callable(trace_writer):
+            await asyncio.to_thread(
+                trace_writer,
+                metadata.trip_id,
+                activation_trace_headers,
+            )
+
         stored = await asyncio.to_thread(self._trip_store.get_trip, metadata.trip_id)
         if stored is None:
             raise RuntimeError("Trip persistence did not return the stored activation")
@@ -165,15 +181,25 @@ class TripOrchestrator:
         results: list[SchedulerPollResult] = []
         for leg in due:
             try:
-                outcome = await self._monitoring_agent.poll(
-                    MonitoringPollRequest(
-                        trip_id=leg.trip_id,
-                        leg_id=leg.leg_id,
-                        flight_iata=leg.flight_iata,
-                        flight_date=leg.flight_date,
-                        replay_key=leg.replay_key,
-                    )
-                )
+                with extracted_trace_context(leg.trace_headers):
+                    with trace_operation(
+                        "scheduler.poll_leg",
+                        service_name="trip-orchestrator",
+                        kind="chain",
+                        attributes={
+                            "travel.trip_ref": hash_reference(leg.trip_id),
+                            "travel.leg_ref": hash_reference(leg.leg_id),
+                        },
+                    ):
+                        outcome = await self._monitoring_agent.poll(
+                            MonitoringPollRequest(
+                                trip_id=leg.trip_id,
+                                leg_id=leg.leg_id,
+                                flight_iata=leg.flight_iata,
+                                flight_date=leg.flight_date,
+                                replay_key=leg.replay_key,
+                            )
+                        )
                 await asyncio.to_thread(
                     self._trip_store.complete_poll,
                     leg,
@@ -317,6 +343,7 @@ def create_trip_orchestrator_app(
         lifespan=lifespan,
     )
     app.state.ready = False
+    install_telemetry_routes(app, service_name="trip-orchestrator")
 
     @app.get("/health/live", tags=["health"])
     async def health() -> dict[str, str]:

@@ -49,6 +49,7 @@ class ScheduledLeg(BaseModel):
     scheduled_arrival_at: str
     due_at: str
     replay_key: str = Field(min_length=1)
+    trace_headers: dict[str, str] = Field(default_factory=dict)
 
     @property
     def poll_key(self) -> str:
