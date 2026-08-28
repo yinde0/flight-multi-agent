@@ -12,6 +12,7 @@ from flight_ui.presentation import (
     format_instant,
     make_upload_identity,
     mask_confirmation,
+    normalize_phone_number,
     next_poll_at,
     safe_pdf_filename,
     trip_status,
@@ -70,6 +71,8 @@ def test_pdf_validation_and_upload_identity_are_safe_and_stable() -> None:
     assert fixture_id == f"upload-{digest[:12]}-abc123"
     assert safe_pdf_filename("../boarding-pass.PDF") == "boarding-pass.PDF"
     assert safe_pdf_filename("..\\boarding-pass.PDF") == "boarding-pass.PDF"
+    assert normalize_phone_number("+44 7700 900123") == "+447700900123"
+    assert normalize_phone_number("0044 (7700) 900-123") == "+447700900123"
 
 
 def test_trip_presentation_hides_booking_reference_and_summarizes_state() -> None:
@@ -103,6 +106,8 @@ def test_api_client_uploads_pdf_to_trip_activation_boundary() -> None:
         trip_id="trip-ui-golden",
         traveler_ref="traveler-ui-golden",
         fixture_id="upload-ui-golden",
+        phone_e164="+447700900123",
+        sms_consent=True,
     )
 
     assert result["status"] == "activated"
@@ -110,6 +115,7 @@ def test_api_client_uploads_pdf_to_trip_activation_boundary() -> None:
     assert observed["path"] == "/v1/trips/activate"
     assert b'trip-ui-golden' in observed["content"]
     assert b'filename="ticket.pdf"' in observed["content"]
+    assert b'+447700900123' in observed["content"]
 
 
 def test_api_client_does_not_leak_upstream_error_details() -> None:
@@ -140,6 +146,8 @@ def test_streamlit_customer_can_upload_and_see_expected_trip(monkeypatch: pytest
 
     import flight_ui.api_client as api_client_module
 
+    captured_activation: dict[str, Any] = {}
+
     class FakeTravelApiClient:
         def __init__(self, base_url: str, *, timeout_seconds: float) -> None:
             self.base_url = base_url
@@ -148,7 +156,8 @@ def test_streamlit_customer_can_upload_and_see_expected_trip(monkeypatch: pytest
         def health(self) -> bool:
             return True
 
-        def activate_trip(self, **_: Any) -> dict[str, Any]:
+        def activate_trip(self, **kwargs: Any) -> dict[str, Any]:
+            captured_activation.update(kwargs)
             return activation_payload()
 
         def get_trip(self, trip_id: str) -> dict[str, Any]:
@@ -162,14 +171,18 @@ def test_streamlit_customer_can_upload_and_see_expected_trip(monkeypatch: pytest
     assert not app.exception
     assert any(title.value == "Your ticket in. Travel stress out." for title in app.title)
     assert len(app.file_uploader) == 1
+    assert app.checkbox[0].value is False
+    assert app.checkbox[1].value is False
 
     app.text_input[0].input("Sam")
+    app.text_input[1].input("+44 7700 900123")
     app.file_uploader[0].upload(
         "ticket.pdf",
         b"%PDF-1.7\nsynthetic customer ticket",
         "application/pdf",
     )
     app.checkbox[0].check()
+    app.checkbox[1].check()
     submit = next(button for button in app.button if button.label == "Start watching my trip")
     submit.click()
     app.run(timeout=8)
@@ -179,3 +192,5 @@ def test_streamlit_customer_can_upload_and_see_expected_trip(monkeypatch: pytest
     assert any(metric.label == "Flights being watched" and metric.value == "1" for metric in app.metric)
     assert any("MAN → FRA" in markdown.value for markdown in app.markdown)
     assert all("SB8M2P" not in caption.value for caption in app.caption)
+    assert captured_activation["phone_e164"] == "+447700900123"
+    assert captured_activation["sms_consent"] is True

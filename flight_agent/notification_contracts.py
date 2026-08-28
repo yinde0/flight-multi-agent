@@ -2,7 +2,23 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from flight_agent.trip_contracts import E164_PATTERN
+
+
+TWILIO_MESSAGE_SID_PATTERN = r"^(?:SM|MM)[0-9a-fA-F]{32}$"
+TWILIO_MESSAGE_STATUS = Literal[
+    "accepted",
+    "scheduled",
+    "queued",
+    "sending",
+    "sent",
+    "delivered",
+    "undelivered",
+    "failed",
+    "canceled",
+]
 
 
 class ConfirmedDisruptionEvent(BaseModel):
@@ -55,11 +71,20 @@ class NotificationCommand(BaseModel):
     trip_id: str = Field(min_length=1)
     leg_id: str = Field(min_length=1)
     recipient_ref: str = Field(pattern=r"^traveler:[a-z0-9-]+$")
-    channel: Literal["push"] = "push"
+    channel: Literal["push", "sms"] = "push"
+    recipient_address: str | None = Field(default=None, pattern=E164_PATTERN)
     template: Literal["travel_disruption_v1"] = "travel_disruption_v1"
     template_variables: dict[str, str]
     search_requested: bool
     approval: EvalApproval
+
+    @model_validator(mode="after")
+    def validate_recipient_address(self) -> "NotificationCommand":
+        if self.channel == "sms" and self.recipient_address is None:
+            raise ValueError("SMS notification requires a recipient address")
+        if self.channel != "sms" and self.recipient_address is not None:
+            raise ValueError("Recipient address is only valid for SMS notifications")
+        return self
 
 
 class NotificationReceipt(BaseModel):
@@ -73,8 +98,9 @@ class NotificationReceipt(BaseModel):
     idempotency_key: str
     provider: str
     provider_delivery_id: str
-    status: Literal["delivered", "duplicate"]
+    status: Literal["accepted", "delivered", "duplicate"]
     delivered_at: str
+    provider_status: str | None = None
 
 
 class NotificationActionRecord(BaseModel):
@@ -89,9 +115,45 @@ class NotificationActionRecord(BaseModel):
     trip_id: str
     leg_id: str
     verdict: Literal["NOTIFY", "NOTIFY_AND_SEARCH"]
-    status: Literal["delivered", "duplicate", "failed", "rejected"]
+    status: Literal["accepted", "delivered", "duplicate", "failed", "rejected"]
     idempotency_key: str
     provider: str | None = None
     provider_delivery_id: str | None = None
+    provider_status: str | None = None
     recorded_at: str
+    delivery_updated_at: str | None = None
     error_code: str | None = None
+
+
+class TwilioSmsStatusCallback(BaseModel):
+    """PII-free subset selected only after the full request is authenticated."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_sid: str = Field(pattern=r"^AC[0-9a-fA-F]{32}$")
+    message_sid: str = Field(pattern=TWILIO_MESSAGE_SID_PATTERN)
+    message_status: TWILIO_MESSAGE_STATUS
+    error_code: int | None = Field(default=None, ge=0)
+
+
+class DeliveryReconciliationOutcome(BaseModel):
+    """Result of applying one authenticated provider delivery update."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["twilio"] = "twilio"
+    provider_delivery_id: str = Field(pattern=TWILIO_MESSAGE_SID_PATTERN)
+    found: bool
+    applied: bool
+    duplicate: bool = False
+    ignored_reason: Literal[
+        "UNKNOWN_DELIVERY",
+        "DUPLICATE",
+        "STALE_STATUS",
+        "TERMINAL_STATUS",
+    ] | None = None
+    decision_id: str | None = None
+    notification_id: str | None = None
+    previous_provider_status: str | None = None
+    provider_status: str | None = None
+    action_status: Literal["accepted", "delivered", "failed"] | None = None

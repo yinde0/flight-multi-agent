@@ -264,6 +264,19 @@ services:
       - 0.0.0.0
       - --port
       - "8007"
+    environment:
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_AUTH_KEY: ${TWILIO_AUTH_KEY:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
+      TWILIO_SMS_BODY_OVERRIDE: ${TWILIO_SMS_BODY_OVERRIDE:-}
+      TWILIO_BASE_URL: ${TWILIO_BASE_URL:-https://api.twilio.com/2010-04-01}
+      TWILIO_TIMEOUT_SECONDS: ${TWILIO_TIMEOUT_SECONDS:-30}
     expose:
       - "8007"
     healthcheck:
@@ -278,6 +291,48 @@ services:
       start_period: 10s
     networks:
       - notification-internal
+      - notification-egress
+
+  notification-webhook-service:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.notification_webhook:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8014"
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: eu-west-2
+      DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
+      MONITORING_TABLE_NAME: travel-monitoring-state
+      TWILIO_WEBHOOK_ENABLED: ${TWILIO_WEBHOOK_ENABLED:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_AUTH_KEY: ${TWILIO_AUTH_KEY:-}
+      TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
+      NOTIFICATION_WEBHOOK_TEST_API_ENABLED: "false"
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+    expose:
+      - "8014"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8014/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+      - notification-egress
 
   notification-action-service:
     build:
@@ -297,7 +352,9 @@ services:
       MONITORING_TABLE_NAME: travel-monitoring-state
       NATS_URL: nats://nats:4222
       NOTIFICATION_MCP_URL: http://notification-mcp:8007/mcp
-      NO_PROXY: notification-mcp,dynamodb-local,nats,localhost,127.0.0.1
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
+      TRIP_ORCHESTRATOR_URL: http://trip-orchestrator:8011
+      NO_PROXY: notification-mcp,trip-orchestrator,dynamodb-local,nats,localhost,127.0.0.1
     depends_on:
       dynamodb-local:
         condition: service_started
@@ -609,6 +666,7 @@ networks:
   weather-egress:
   notification-internal:
     internal: true
+  notification-egress:
   search-internal:
     internal: true
   search-egress:

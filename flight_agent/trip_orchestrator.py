@@ -19,11 +19,14 @@ from flight_agent.monitoring_a2a_client import (
 from flight_agent.monitoring_contracts import MonitoringPollRequest
 from flight_agent.trip_contracts import (
     DocumentStorageStatus,
+    NotificationRecipient,
     SchedulerPollResult,
     SchedulerTickOutcome,
     SchedulerTickRequest,
     StoredTripView,
+    SmsNotificationPreference,
     TripActivationOutcome,
+    validate_sms_notification_input,
 )
 from flight_agent.trip_store import PostgresTripStore, TripStore, format_timestamp
 from flight_agent.telemetry import (
@@ -97,6 +100,7 @@ class TripOrchestrator:
         metadata: DocumentMetadata,
         *,
         activated_at: datetime | None = None,
+        notification_preference: SmsNotificationPreference | None = None,
     ) -> TripActivationOutcome:
         activation_trace_headers = trace_headers()
         existing = await asyncio.to_thread(self._trip_store.get_trip, metadata.trip_id)
@@ -108,6 +112,19 @@ class TripOrchestrator:
                 raise TripDocumentConflictError(
                     "Trip ID is already registered to different source evidence"
                 )
+            if notification_preference is not None:
+                existing_recipient = await asyncio.to_thread(
+                    self._trip_store.get_notification_recipient,
+                    metadata.trip_id,
+                )
+                if (
+                    existing_recipient is None
+                    or existing_recipient.phone_e164
+                    != notification_preference.phone_e164
+                ):
+                    raise TripDocumentConflictError(
+                        "Trip ID already has different notification preferences"
+                    )
             return _activation_from_view(existing, idempotent_replay=True)
 
         document = await asyncio.to_thread(
@@ -128,6 +145,7 @@ class TripOrchestrator:
                 parsed.itinerary,
                 document,
                 created_at=now,
+                notification_preference=notification_preference,
             )
         else:
             inserted = await asyncio.to_thread(
@@ -137,6 +155,7 @@ class TripOrchestrator:
                 document=document,
                 review=parsed.review or {"reason_codes": ["PARSE_REVIEW_REQUIRED"]},
                 created_at=now,
+                notification_preference=notification_preference,
             )
 
         trace_writer = getattr(self._trip_store, "put_trace_context", None)
@@ -158,6 +177,13 @@ class TripOrchestrator:
 
     async def get_trip(self, trip_id: str) -> StoredTripView | None:
         return await asyncio.to_thread(self._trip_store.get_trip, trip_id)
+
+    async def get_notification_recipient(
+        self, trip_id: str
+    ) -> NotificationRecipient | None:
+        return await asyncio.to_thread(
+            self._trip_store.get_notification_recipient, trip_id
+        )
 
     async def verify_document(self, trip_id: str) -> DocumentStorageStatus | None:
         trip = await self.get_trip(trip_id)
@@ -357,6 +383,8 @@ def create_trip_orchestrator_app(
         trip_id: str = Form(...),
         traveler_ref: str = Form(...),
         fixture_id: str = Form(...),
+        phone_e164: str | None = Form(default=None),
+        sms_consent: bool = Form(default=False),
     ) -> TripActivationOutcome:
         document_bytes = await file.read(MAX_PDF_BYTES + 1)
         if len(document_bytes) > MAX_PDF_BYTES:
@@ -372,8 +400,28 @@ def create_trip_orchestrator_app(
             filename=file.filename or "itinerary.pdf",
             sha256=hashlib.sha256(document_bytes).hexdigest(),
         )
+        now = _now_utc()
         try:
-            return await resolved_orchestrator.activate_trip(document_bytes, metadata)
+            validated_phone = validate_sms_notification_input(
+                phone_e164, sms_consent
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        notification_preference = (
+            SmsNotificationPreference(
+                phone_e164=validated_phone,
+                consent_granted_at=format_timestamp(now),
+            )
+            if validated_phone
+            else None
+        )
+        try:
+            return await resolved_orchestrator.activate_trip(
+                document_bytes,
+                metadata,
+                activated_at=now,
+                notification_preference=notification_preference,
+            )
         except TripDocumentConflictError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
@@ -383,6 +431,17 @@ def create_trip_orchestrator_app(
         if trip is None:
             raise HTTPException(status_code=404, detail="Trip not found")
         return trip
+
+    @app.get(
+        "/v1/trips/{trip_id}/notification-recipient",
+        response_model=NotificationRecipient,
+        include_in_schema=False,
+    )
+    async def notification_recipient(trip_id: str) -> NotificationRecipient:
+        recipient = await resolved_orchestrator.get_notification_recipient(trip_id)
+        if recipient is None:
+            raise HTTPException(status_code=404, detail="SMS recipient not found")
+        return recipient
 
     @app.get(
         "/v1/trips/{trip_id}/document-status",

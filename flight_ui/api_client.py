@@ -58,15 +58,21 @@ class TravelApiClient:
         trip_id: str,
         traveler_ref: str,
         fixture_id: str,
+        phone_e164: str | None = None,
+        sms_consent: bool = False,
     ) -> dict[str, Any]:
+        data = {
+            "trip_id": trip_id,
+            "traveler_ref": traveler_ref,
+            "fixture_id": fixture_id,
+            "sms_consent": str(sms_consent).lower(),
+        }
+        if phone_e164:
+            data["phone_e164"] = phone_e164
         return self._request_json(
             "POST",
             "/v1/trips/activate",
-            data={
-                "trip_id": trip_id,
-                "traveler_ref": traveler_ref,
-                "fixture_id": fixture_id,
-            },
+            data=data,
             files={
                 "file": (filename, document_bytes, "application/pdf"),
             },

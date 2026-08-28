@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any, Callable
 
 
 MAX_PDF_BYTES = 5 * 1024 * 1024
+E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
 
 
 def validate_pdf(document_bytes: bytes) -> str | None:
@@ -38,6 +40,17 @@ def safe_pdf_filename(filename: str | None) -> str:
     if not candidate.lower().endswith(".pdf"):
         return "itinerary.pdf"
     return candidate[:255]
+
+
+def normalize_phone_number(value: str) -> str:
+    compact = re.sub(r"[\s().-]", "", value.strip())
+    if compact.startswith("00"):
+        compact = f"+{compact[2:]}"
+    if E164_PATTERN.fullmatch(compact) is None:
+        raise ValueError(
+            "Enter a full international mobile number, for example +44 7700 900123."
+        )
+    return compact
 
 
 def mask_confirmation(code: str) -> str:

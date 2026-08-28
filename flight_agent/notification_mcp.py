@@ -9,7 +9,10 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from flight_agent.notification import RecordingNotificationProvider
+from flight_agent.notification import (
+    RecordingNotificationProvider,
+    TwilioNotificationProvider,
+)
 from flight_agent.notification_contracts import (
     NotificationCommand,
     NotificationReceipt,
@@ -17,7 +20,13 @@ from flight_agent.notification_contracts import (
 from flight_agent.telemetry import install_trace_middleware
 
 
-provider = RecordingNotificationProvider()
+provider_name = os.getenv("NOTIFICATION_PROVIDER", "recording").lower()
+if provider_name == "recording":
+    provider = RecordingNotificationProvider()
+elif provider_name == "twilio":
+    provider = TwilioNotificationProvider.from_environment()
+else:
+    raise RuntimeError("NOTIFICATION_PROVIDER must be recording or twilio")
 
 
 class NotificationFailureGate:
@@ -41,7 +50,7 @@ mcp = FastMCP(
     "Travel Notification",
     instructions=(
         "Accept only notification commands carrying a non-suppressed Eval approval. "
-        "This slice records delivery and cannot contact an external recipient."
+        "The configured provider may record delivery or submit a consented SMS."
     ),
     host="0.0.0.0",
     port=8007,
@@ -61,7 +70,7 @@ mcp = FastMCP(
 @mcp.tool(
     name="send_notification",
     description=(
-        "Record an idempotent notification delivery after a verified Eval approval."
+        "Send an idempotent notification only after a verified Eval approval."
     ),
     structured_output=True,
 )
@@ -74,7 +83,7 @@ def send_notification(command: NotificationCommand) -> NotificationReceipt:
 @mcp.custom_route("/health/live", methods=["GET"])
 async def health(request: Request) -> JSONResponse:
     del request
-    return JSONResponse({"status": "ok", "provider": "recording"})
+    return JSONResponse({"status": "ok", "provider": provider_name})
 
 
 @mcp.custom_route("/v1/reliability/audit", methods=["GET"])

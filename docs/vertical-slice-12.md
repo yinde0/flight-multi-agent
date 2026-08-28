@@ -12,7 +12,8 @@ locations, and operational controls remain inside the container network.
 
 ## Customer journey
 
-1. The traveler enters a display name and selects a PDF up to 5 MB.
+1. The traveler enters a display name, an optional consented SMS number, and
+   selects a PDF up to 5 MB.
 2. The browser-facing app validates the PDF signature and creates opaque upload
    identifiers that are reused if the request is retried.
 3. `travel-api` activates the trip through the existing orchestrator vertical.

@@ -22,8 +22,10 @@ from flight_agent.monitoring_contracts import (
 from flight_agent.parser import extract_pdf_text, parse_extracted_text
 from flight_agent.trip_contracts import (
     DocumentObjectRef,
+    NotificationRecipient,
     ScheduledLeg,
     SchedulerTickRequest,
+    SmsNotificationPreference,
     StoredLegView,
     StoredTripView,
 )
@@ -140,6 +142,7 @@ class MemoryTripStore:
         self.trips: dict[str, StoredTripView] = {}
         self.scheduled: dict[tuple[str, str], dict[str, Any]] = {}
         self.trace_contexts: dict[str, dict[str, str]] = {}
+        self.contacts: dict[str, NotificationRecipient] = {}
 
     def ensure_schema(self) -> None:
         return None
@@ -148,8 +151,19 @@ class MemoryTripStore:
         trip = self.trips.get(trip_id)
         return trip.model_copy(deep=True) if trip else None
 
+    def get_notification_recipient(
+        self, trip_id: str
+    ) -> NotificationRecipient | None:
+        recipient = self.contacts.get(trip_id)
+        return recipient.model_copy(deep=True) if recipient else None
+
     def save_parsed_trip(
-        self, itinerary, document, *, created_at: datetime
+        self,
+        itinerary,
+        document,
+        *,
+        created_at: datetime,
+        notification_preference=None,
     ) -> bool:
         if itinerary.trip_id in self.trips:
             return False
@@ -181,6 +195,13 @@ class MemoryTripStore:
             created_at=now,
             updated_at=now,
         )
+        if notification_preference is not None:
+            self.contacts[itinerary.trip_id] = NotificationRecipient(
+                trip_id=itinerary.trip_id,
+                recipient_ref=f"traveler:{itinerary.trip_id}",
+                phone_e164=notification_preference.phone_e164,
+                consent_granted_at=notification_preference.consent_granted_at,
+            )
         return True
 
     def save_review_trip(
@@ -191,6 +212,7 @@ class MemoryTripStore:
         document,
         review,
         created_at,
+        notification_preference=None,
     ) -> bool:
         if trip_id in self.trips:
             return False
@@ -204,6 +226,13 @@ class MemoryTripStore:
             created_at=now,
             updated_at=now,
         )
+        if notification_preference is not None:
+            self.contacts[trip_id] = NotificationRecipient(
+                trip_id=trip_id,
+                recipient_ref=f"traveler:{trip_id}",
+                phone_e164=notification_preference.phone_e164,
+                consent_granted_at=notification_preference.consent_granted_at,
+            )
         return True
 
     def put_trace_context(self, trip_id, trace_headers):
@@ -331,6 +360,45 @@ def test_same_trip_id_with_different_document_is_rejected() -> None:
                 changed, metadata("trip-v7-conflict", changed)
             )
         )
+
+
+def test_consented_sms_contact_is_private_and_idempotent() -> None:
+    content = PDF.read_bytes()
+    trips = MemoryTripStore()
+    orchestrator = TripOrchestrator(
+        document_agent=ParsingGateway(),
+        monitoring_agent=SequenceMonitoringGateway(),
+        document_store=MemoryDocumentStore(),
+        trip_store=trips,
+    )
+    preference = SmsNotificationPreference(
+        phone_e164="+447700900123",
+        consent_granted_at="2026-09-15T06:00:00Z",
+    )
+
+    first = asyncio.run(
+        orchestrator.activate_trip(
+            content,
+            metadata("trip-v7-sms", content),
+            notification_preference=preference,
+        )
+    )
+    second = asyncio.run(
+        orchestrator.activate_trip(
+            content,
+            metadata("trip-v7-sms", content),
+            notification_preference=preference,
+        )
+    )
+    recipient = asyncio.run(
+        orchestrator.get_notification_recipient("trip-v7-sms")
+    )
+
+    assert first.status == "activated"
+    assert second.status == "already_active"
+    assert recipient is not None
+    assert recipient.phone_e164 == "+447700900123"
+    assert "phone" not in first.model_dump_json()
 
 
 def test_review_required_document_is_stored_but_never_scheduled() -> None:

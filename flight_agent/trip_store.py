@@ -13,7 +13,9 @@ from psycopg.types.json import Jsonb
 from flight_agent.contracts import CanonicalItinerary
 from flight_agent.trip_contracts import (
     DocumentObjectRef,
+    NotificationRecipient,
     ScheduledLeg,
+    SmsNotificationPreference,
     StoredLegView,
     StoredTripView,
 )
@@ -58,12 +60,17 @@ class TripStore(Protocol):
 
     def get_trip(self, trip_id: str) -> StoredTripView | None: ...
 
+    def get_notification_recipient(
+        self, trip_id: str
+    ) -> NotificationRecipient | None: ...
+
     def save_parsed_trip(
         self,
         itinerary: CanonicalItinerary,
         document: DocumentObjectRef,
         *,
         created_at: datetime,
+        notification_preference: SmsNotificationPreference | None = None,
     ) -> bool: ...
 
     def save_review_trip(
@@ -74,6 +81,7 @@ class TripStore(Protocol):
         document: DocumentObjectRef,
         review: dict[str, Any],
         created_at: datetime,
+        notification_preference: SmsNotificationPreference | None = None,
     ) -> bool: ...
 
     def put_trace_context(
@@ -108,6 +116,15 @@ CREATE TABLE IF NOT EXISTS trips (
     document_etag TEXT,
     itinerary_json JSONB,
     review_json JSONB,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trip_notification_contacts (
+    trip_id TEXT PRIMARY KEY REFERENCES trips(trip_id) ON DELETE CASCADE,
+    channel TEXT NOT NULL CHECK (channel = 'sms'),
+    phone_e164 TEXT NOT NULL CHECK (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),
+    consent_granted_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
 );
@@ -234,12 +251,60 @@ class PostgresTripStore:
             updated_at=format_timestamp(trip["updated_at"]),
         )
 
+    def get_notification_recipient(
+        self, trip_id: str
+    ) -> NotificationRecipient | None:
+        with self._connect() as connection:
+            contact = connection.execute(
+                """
+                SELECT trip_id, phone_e164, consent_granted_at
+                FROM trip_notification_contacts
+                WHERE trip_id = %s AND channel = 'sms'
+                """,
+                (trip_id,),
+            ).fetchone()
+        if contact is None:
+            return None
+        return NotificationRecipient(
+            trip_id=contact["trip_id"],
+            recipient_ref=f"traveler:{contact['trip_id']}",
+            phone_e164=contact["phone_e164"],
+            consent_granted_at=format_timestamp(contact["consent_granted_at"]),
+        )
+
+    @staticmethod
+    def _save_notification_preference(
+        connection,
+        *,
+        trip_id: str,
+        preference: SmsNotificationPreference | None,
+        created_at: datetime,
+    ) -> None:
+        if preference is None:
+            return
+        connection.execute(
+            """
+            INSERT INTO trip_notification_contacts (
+                trip_id, channel, phone_e164, consent_granted_at,
+                created_at, updated_at
+            ) VALUES (%s, 'sms', %s, %s, %s, %s)
+            """,
+            (
+                trip_id,
+                preference.phone_e164,
+                parse_timestamp(preference.consent_granted_at),
+                created_at,
+                created_at,
+            ),
+        )
+
     def save_parsed_trip(
         self,
         itinerary: CanonicalItinerary,
         document: DocumentObjectRef,
         *,
         created_at: datetime,
+        notification_preference: SmsNotificationPreference | None = None,
     ) -> bool:
         with self._connect() as connection:
             inserted = connection.execute(
@@ -288,6 +353,12 @@ class PostgresTripStore:
                         created_at,
                     ),
                 )
+            self._save_notification_preference(
+                connection,
+                trip_id=itinerary.trip_id,
+                preference=notification_preference,
+                created_at=created_at,
+            )
         return True
 
     def save_review_trip(
@@ -298,6 +369,7 @@ class PostgresTripStore:
         document: DocumentObjectRef,
         review: dict[str, Any],
         created_at: datetime,
+        notification_preference: SmsNotificationPreference | None = None,
     ) -> bool:
         with self._connect() as connection:
             inserted = connection.execute(
@@ -322,6 +394,13 @@ class PostgresTripStore:
                     created_at,
                 ),
             ).fetchone()
+            if inserted is not None:
+                self._save_notification_preference(
+                    connection,
+                    trip_id=trip_id,
+                    preference=notification_preference,
+                    created_at=created_at,
+                )
         return inserted is not None
 
     def put_trace_context(

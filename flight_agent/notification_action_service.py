@@ -29,6 +29,10 @@ from flight_agent.notification_contracts import (
     NotificationActionRecord,
     NotificationCommand,
 )
+from flight_agent.notification_recipient import (
+    HttpNotificationRecipientResolver,
+    NotificationRecipientResolver,
+)
 from flight_agent.notification_mcp_client import (
     NotificationGateway,
     StreamableHttpNotificationMcpClient,
@@ -96,11 +100,17 @@ def process_confirmed_event(
     *,
     store: MonitoringStore,
     notifier: NotificationGateway,
+    recipient_resolver: NotificationRecipientResolver | None = None,
+    delivery_provider: str = "recording",
     authority_timeout_seconds: float = 3.0,
 ) -> NotificationActionRecord:
     event = ConfirmedDisruptionEvent.model_validate(event_payload)
     existing = store.get_notification(event.decision_id)
-    if existing is not None and existing.get("status") in {"delivered", "duplicate"}:
+    if existing is not None and existing.get("status") in {
+        "accepted",
+        "delivered",
+        "duplicate",
+    }:
         return NotificationActionRecord.model_validate(existing)
 
     decision = _verified_decision(
@@ -123,12 +133,43 @@ def process_confirmed_event(
             error_code="EVAL_AUTHORITY_MISMATCH",
         )
 
+    recipient_address = None
+    channel = "push"
+    if delivery_provider == "twilio":
+        try:
+            recipient = (
+                recipient_resolver.get_recipient(event.trip_id)
+                if recipient_resolver is not None
+                else None
+            )
+        except Exception:
+            recipient = None
+        if recipient is None:
+            record = NotificationActionRecord(
+                notification_id=notification_id,
+                candidate_id=event.candidate_id,
+                decision_id=event.decision_id,
+                trip_id=event.trip_id,
+                leg_id=event.leg_id,
+                verdict=event.verdict,
+                status="rejected",
+                idempotency_key=idempotency_key,
+                recorded_at=_now_utc(),
+                error_code="SMS_RECIPIENT_UNAVAILABLE",
+            )
+            store.put_notification(event.decision_id, record.model_dump(mode="json"))
+            return record
+        recipient_address = recipient.phone_e164
+        channel = "sms"
+
     command = NotificationCommand(
         notification_id=notification_id,
         idempotency_key=idempotency_key,
         trip_id=event.trip_id,
         leg_id=event.leg_id,
         recipient_ref=f"traveler:{event.trip_id}",
+        recipient_address=recipient_address,
+        channel=channel,
         template_variables={
             "category": event.category,
             "trip_id": event.trip_id,
@@ -157,6 +198,7 @@ def process_confirmed_event(
             idempotency_key=idempotency_key,
             provider=receipt.provider,
             provider_delivery_id=receipt.provider_delivery_id,
+            provider_status=receipt.provider_status,
             recorded_at=receipt.delivered_at,
         )
     except Exception:
@@ -180,11 +222,23 @@ def create_notification_action_app(
     *,
     store: MonitoringStore | None = None,
     notifier: NotificationGateway | None = None,
+    recipient_resolver: NotificationRecipientResolver | None = None,
+    delivery_provider: str | None = None,
 ) -> FastAPI:
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
     resolved_notifier = notifier or StreamableHttpNotificationMcpClient(
         os.getenv("NOTIFICATION_MCP_URL", "http://127.0.0.1:8007/mcp")
     )
+    resolved_delivery_provider = (
+        delivery_provider
+        if delivery_provider is not None
+        else os.getenv("NOTIFICATION_PROVIDER", "recording").lower()
+    )
+    resolved_recipient_resolver = recipient_resolver
+    if resolved_delivery_provider == "twilio" and resolved_recipient_resolver is None:
+        resolved_recipient_resolver = HttpNotificationRecipientResolver(
+            os.getenv("TRIP_ORCHESTRATOR_URL", "http://127.0.0.1:8011")
+        )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -207,8 +261,10 @@ def create_notification_action_app(
                     envelope.payload,
                     store=resolved_store,
                     notifier=resolved_notifier,
+                    recipient_resolver=resolved_recipient_resolver,
+                    delivery_provider=resolved_delivery_provider,
                 )
-                if record.status in {"delivered", "duplicate"}:
+                if record.status in {"accepted", "delivered", "duplicate"}:
                     await message.ack_sync(timeout=3)
                 elif record.status == "rejected":
                     await quarantine_message(

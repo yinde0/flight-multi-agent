@@ -15,7 +15,9 @@
     "idempotency_key": {"type": "string", "minLength": 1},
     "provider": {"type": "string"},
     "provider_delivery_id": {"type": "string"},
-    "status": {"enum": ["delivered", "duplicate"]},
+    "status": {"enum": ["accepted", "delivered", "duplicate"]},
+    "provider_status": {"type": ["string", "null"]},
+    "delivery_updated_at": {"type": ["string", "null"], "format": "date-time"},
     "delivered_at": {"type": "string", "format": "date-time"}
   }
 }

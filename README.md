@@ -23,6 +23,27 @@ The frontend only calls `travel-api`; it does not receive provider or storage
 credentials. See [docs/vertical-slice-12.md](docs/vertical-slice-12.md) for the
 customer journey, test contract, and deliberate limitations.
 
+The upload form also supports explicitly consented operational SMS alerts. The
+phone number is stored separately from public trip data and reaches the Twilio
+provider only after Eval approves a disruption. See
+[docs/vertical-slice-13.md](docs/vertical-slice-13.md) for credentials, the
+Twilio-stub vertical test, and production limitations.
+
+SMS delivery is reconciled separately from provider submission. A dedicated
+webhook service verifies `X-Twilio-Signature`, resolves the provider Message SID
+through a DynamoDB reverse index, and advances delivery state without allowing
+duplicate or out-of-order callbacks to regress a terminal result. Run the
+container proof with:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.activation-test.yaml -f compose.twilio-test.yaml up -d --build --wait --remove-orphans
+.\.venv\Scripts\python.exe tools\run_vertical_sms_delivery_test.py
+docker compose -f compose.yaml up -d --wait --remove-orphans
+```
+
+See [docs/vertical-slice-14.md](docs/vertical-slice-14.md) for the callback
+security boundary and production ingress requirements.
+
 The package defines the contracts those components must satisfy and keeps
 deterministic scenario replay as the acceptance boundary for every application
 vertical slice.

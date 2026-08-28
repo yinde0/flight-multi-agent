@@ -47,6 +47,18 @@ class MonitoringStore(Protocol):
         self, decision_id: str, notification: dict[str, Any]
     ) -> None: ...
 
+    def get_notification_by_provider_delivery(
+        self, provider: str, provider_delivery_id: str
+    ) -> tuple[str, dict[str, Any]] | None: ...
+
+    def compare_and_set_notification(
+        self,
+        decision_id: str,
+        *,
+        expected: dict[str, Any],
+        replacement: dict[str, Any],
+    ) -> bool: ...
+
     def wait_for_notification(
         self, decision_id: str, *, timeout_seconds: float
     ) -> dict[str, Any] | None: ...
@@ -361,7 +373,76 @@ class DynamoMonitoringStateStore:
     def put_notification(
         self, decision_id: str, notification: dict[str, Any]
     ) -> None:
-        self._put(f"DECISION#{decision_id}", "NOTIFICATION", notification)
+        notification_item = self._payload_item(
+            f"DECISION#{decision_id}", "NOTIFICATION", notification
+        )
+        provider = notification.get("provider")
+        provider_delivery_id = notification.get("provider_delivery_id")
+        if isinstance(provider, str) and isinstance(provider_delivery_id, str):
+            index_item = self._payload_item(
+                f"PROVIDER#{provider}",
+                f"DELIVERY#{provider_delivery_id}",
+                {"decision_id": decision_id},
+            )
+            self._client.transact_write_items(
+                TransactItems=[
+                    self._transaction_put(notification_item),
+                    self._transaction_put(index_item),
+                ]
+            )
+            return
+        self._table.put_item(Item=notification_item)
+
+    def get_notification_by_provider_delivery(
+        self, provider: str, provider_delivery_id: str
+    ) -> tuple[str, dict[str, Any]] | None:
+        index = self._payload(
+            self._get(
+                f"PROVIDER#{provider}",
+                f"DELIVERY#{provider_delivery_id}",
+            )
+        )
+        decision_id = index.get("decision_id") if index else None
+        if not isinstance(decision_id, str):
+            return None
+        notification = self.get_notification(decision_id)
+        if notification is None:
+            return None
+        return decision_id, notification
+
+    def compare_and_set_notification(
+        self,
+        decision_id: str,
+        *,
+        expected: dict[str, Any],
+        replacement: dict[str, Any],
+    ) -> bool:
+        expected_payload = json.dumps(
+            expected, separators=(",", ":"), sort_keys=True
+        )
+        replacement_payload = json.dumps(
+            replacement, separators=(",", ":"), sort_keys=True
+        )
+        try:
+            self._table.update_item(
+                Key={
+                    "pk": f"DECISION#{decision_id}",
+                    "sk": "NOTIFICATION",
+                },
+                UpdateExpression="SET payload = :replacement",
+                ConditionExpression="payload = :expected",
+                ExpressionAttributeValues={
+                    ":expected": expected_payload,
+                    ":replacement": replacement_payload,
+                },
+            )
+            return True
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == (
+                "ConditionalCheckFailedException"
+            ):
+                return False
+            raise
 
     def wait_for_notification(
         self, decision_id: str, *, timeout_seconds: float

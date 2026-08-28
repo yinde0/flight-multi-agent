@@ -7,6 +7,48 @@ from pydantic import BaseModel, ConfigDict, Field
 from flight_agent.contracts import CanonicalItinerary
 
 
+E164_PATTERN = r"^\+[1-9][0-9]{7,14}$"
+
+
+def validate_sms_notification_input(
+    phone_e164: str | None,
+    sms_consent: bool,
+) -> str | None:
+    cleaned = phone_e164.strip() if phone_e164 else None
+    if sms_consent and not cleaned:
+        raise ValueError("A mobile number is required for SMS notifications")
+    if cleaned and not sms_consent:
+        raise ValueError("SMS consent is required when a mobile number is supplied")
+    if cleaned:
+        import re
+
+        if re.fullmatch(E164_PATTERN, cleaned) is None:
+            raise ValueError("Mobile number must use international E.164 format")
+    return cleaned
+
+
+class SmsNotificationPreference(BaseModel):
+    """Consent-bearing contact stored separately from itinerary content."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    channel: Literal["sms"] = "sms"
+    phone_e164: str = Field(pattern=E164_PATTERN)
+    consent_granted_at: str
+
+
+class NotificationRecipient(BaseModel):
+    """Private internal lookup result; never included in public trip views."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trip_id: str = Field(pattern=r"^trip-[a-z0-9-]+$")
+    recipient_ref: str = Field(pattern=r"^traveler:trip-[a-z0-9-]+$")
+    channel: Literal["sms"] = "sms"
+    phone_e164: str = Field(pattern=E164_PATTERN)
+    consent_granted_at: str
+
+
 class DocumentObjectRef(BaseModel):
     """Opaque S3 reference; no provider credentials or public URL."""
 

@@ -16,7 +16,11 @@
     "trip_id": {"type": "string", "minLength": 1},
     "leg_id": {"type": "string", "minLength": 1},
     "recipient_ref": {"type": "string", "pattern": "^traveler:[a-z0-9-]+$"},
-    "channel": {"const": "push"},
+    "channel": {"enum": ["push", "sms"]},
+    "recipient_address": {
+      "type": ["string", "null"],
+      "pattern": "^\\+[1-9][0-9]{7,14}$"
+    },
     "template": {"const": "travel_disruption_v1"},
     "template_variables": {
       "type": "object",
@@ -39,5 +43,12 @@
         "decided_at": {"type": "string", "format": "date-time"}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"channel": {"const": "sms"}}},
+      "then": {"required": ["recipient_address"]},
+      "else": {"properties": {"recipient_address": {"type": "null"}}}
+    }
+  ]
 }

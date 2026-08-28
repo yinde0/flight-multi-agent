@@ -1,0 +1,58 @@
+services:
+  twilio-stub:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.twilio_stub:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8013"
+    environment:
+      TWILIO_STUB_ACCOUNT_SID: ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      TWILIO_STUB_API_KEY: SKbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      TWILIO_STUB_API_SECRET: local-twilio-api-secret
+      TWILIO_STUB_AUTH_TOKEN: local-twilio-primary-auth-token
+      TWILIO_STUB_MESSAGING_SERVICE_SID: MGcccccccccccccccccccccccccccccccc
+    ports:
+      - "18013:8013"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8013/health/live', timeout=2)"
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+    networks:
+      - notification-egress
+
+  notification-mcp:
+    environment:
+      NOTIFICATION_PROVIDER: twilio
+      TWILIO_ACCOUNT_SID: ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      TWILIO_API_KEY: SKbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      TWILIO_API_SECRET: local-twilio-api-secret
+      TWILIO_MESSAGING_SERVICE_SID: MGcccccccccccccccccccccccccccccccc
+      TWILIO_BASE_URL: http://twilio-stub:8013/2010-04-01
+      TWILIO_STATUS_CALLBACK_URL: http://notification-webhook-service:8014/v1/webhooks/twilio/status
+    depends_on:
+      twilio-stub:
+        condition: service_healthy
+
+  notification-action-service:
+    environment:
+      NOTIFICATION_PROVIDER: twilio
+
+  notification-webhook-service:
+    environment:
+      TWILIO_WEBHOOK_ENABLED: "true"
+      TWILIO_ACCOUNT_SID: ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      TWILIO_AUTH_TOKEN: local-twilio-primary-auth-token
+      TWILIO_STATUS_CALLBACK_URL: http://notification-webhook-service:8014/v1/webhooks/twilio/status
+      NOTIFICATION_WEBHOOK_TEST_API_ENABLED: "true"
+    ports:
+      - "18014:8014"

@@ -14,6 +14,7 @@ from flight_ui.presentation import (
     make_upload_identity,
     mask_confirmation,
     next_poll_at,
+    normalize_phone_number,
     safe_pdf_filename,
     trip_status,
     validate_pdf,
@@ -37,6 +38,7 @@ def _initialize_session() -> None:
         "pending_upload_sha": None,
         "pending_trip_id": None,
         "pending_fixture_id": None,
+        "sms_enabled": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -55,6 +57,7 @@ def _clear_trip() -> None:
     st.session_state.pending_upload_sha = None
     st.session_state.pending_trip_id = None
     st.session_state.pending_fixture_id = None
+    st.session_state.sms_enabled = False
     st.session_state.traveler_ref = f"traveler-{secrets.token_hex(8)}"
 
 
@@ -89,6 +92,8 @@ def _render_sidebar(client: TravelApiClient) -> None:
             st.subheader("Your trip reference")
             st.code(st.session_state.active_trip_id, language=None)
             st.caption("Keep this private. Account-based trip recovery comes next.")
+            if st.session_state.sms_enabled:
+                st.success("Important SMS alerts enabled", icon=":material/sms:")
 
         st.divider()
         st.caption(
@@ -126,6 +131,17 @@ def _render_upload(client: TravelApiClient) -> None:
             max_upload_size=5,
             help="Text PDFs and scanned image-only PDFs are supported.",
         )
+        st.markdown("**Important disruption alerts**")
+        phone_number = st.text_input(
+            "Mobile number",
+            placeholder="+44 7700 900123",
+            help="Include your country code. We do not display this number in your trip view.",
+            max_chars=30,
+        )
+        sms_consent = st.checkbox(
+            "Text me only when a disruption is significant. Message and data rates may apply. Reply STOP to opt out.",
+            value=False,
+        )
         consent = st.checkbox(
             "I want Travel Watch to store this ticket and monitor its flights."
         )
@@ -148,6 +164,19 @@ def _render_upload(client: TravelApiClient) -> None:
     if not consent:
         st.error("Please confirm that we may store and monitor this trip.", icon=":material/shield:")
         return
+    normalized_phone = None
+    if sms_consent:
+        try:
+            normalized_phone = normalize_phone_number(phone_number)
+        except ValueError as error:
+            st.error(str(error), icon=":material/smartphone:")
+            return
+    elif phone_number.strip():
+        st.error(
+            "Clear the mobile number or consent to important SMS alerts.",
+            icon=":material/sms_failed:",
+        )
+        return
 
     document_bytes = ticket.getvalue()
     validation_error = validate_pdf(document_bytes)
@@ -165,6 +194,8 @@ def _render_upload(client: TravelApiClient) -> None:
                 trip_id=trip_id,
                 traveler_ref=str(st.session_state.traveler_ref),
                 fixture_id=fixture_id,
+                phone_e164=normalized_phone,
+                sms_consent=sms_consent,
             )
         except TravelApiError as error:
             status.update(label="We could not add this trip", state="error", expanded=True)
@@ -176,6 +207,7 @@ def _render_upload(client: TravelApiClient) -> None:
     st.session_state.customer_name = clean_name
     st.session_state.active_trip_id = trip_id
     st.session_state.active_trip = outcome
+    st.session_state.sms_enabled = sms_consent
     st.toast("Your flights are now being watched", icon=":material/check_circle:")
 
 
@@ -250,7 +282,12 @@ def _render_trip(client: TravelApiClient) -> None:
     else:
         st.title(f"You’re all set, {name}")
         st.success(
-            "Your ticket is stored and meaningful flight disruptions will be monitored.",
+            "Your ticket is stored and meaningful flight disruptions will be monitored. "
+            + (
+                "Important alerts will be sent by SMS."
+                if st.session_state.sms_enabled
+                else ""
+            ),
             icon=":material/travel_explore:",
         )
 

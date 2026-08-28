@@ -45,3 +45,18 @@ services:
       WEATHER_PROVIDER: replay
       OpenWeatherMap_API_KEY: local-unused
       WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_weather_timeline.json
+
+  # Golden tests must never contact a real notification provider, even when a
+  # developer's local .env enables Twilio.
+  notification-mcp:
+    environment:
+      NOTIFICATION_PROVIDER: recording
+
+  notification-action-service:
+    environment:
+      NOTIFICATION_PROVIDER: recording
+
+  notification-webhook-service:
+    environment:
+      TWILIO_WEBHOOK_ENABLED: "false"
+      NOTIFICATION_WEBHOOK_TEST_API_ENABLED: "false"

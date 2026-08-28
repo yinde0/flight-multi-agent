@@ -16,6 +16,7 @@ from flight_agent.notification_contracts import (
     EvalApproval,
     NotificationCommand,
 )
+from flight_agent.trip_contracts import NotificationRecipient
 
 
 class NotificationMemoryStore:
@@ -51,6 +52,16 @@ class FailingGateway:
     def send_notification(self, command: NotificationCommand):
         del command
         raise RuntimeError("simulated MCP outage")
+
+
+class StaticRecipientResolver:
+    def get_recipient(self, trip_id: str) -> NotificationRecipient | None:
+        return NotificationRecipient(
+            trip_id=trip_id,
+            recipient_ref=f"traveler:{trip_id}",
+            phone_e164="+447700900123",
+            consent_granted_at="2026-09-15T05:00:00Z",
+        )
 
 
 def confirmed_event() -> dict[str, Any]:
@@ -134,6 +145,42 @@ def test_notification_mcp_failure_is_audited_without_fake_delivery() -> None:
     assert result.error_code == "NOTIFICATION_MCP_FAILED"
     assert result.provider is None
     assert store.notifications[result.decision_id]["status"] == "failed"
+
+
+def test_twilio_mode_resolves_consented_phone_only_after_eval_approval() -> None:
+    store = authorized_store()
+    gateway = RecordingGateway()
+
+    result = process_confirmed_event(
+        confirmed_event(),
+        store=store,
+        notifier=gateway,
+        recipient_resolver=StaticRecipientResolver(),
+        delivery_provider="twilio",
+        authority_timeout_seconds=0,
+    )
+
+    assert result.status == "delivered"
+    assert len(gateway.calls) == 1
+    assert gateway.calls[0].channel == "sms"
+    assert gateway.calls[0].recipient_address == "+447700900123"
+
+
+def test_twilio_mode_rejects_notification_when_consent_is_unavailable() -> None:
+    store = authorized_store()
+    gateway = RecordingGateway()
+
+    result = process_confirmed_event(
+        confirmed_event(),
+        store=store,
+        notifier=gateway,
+        delivery_provider="twilio",
+        authority_timeout_seconds=0,
+    )
+
+    assert result.status == "rejected"
+    assert result.error_code == "SMS_RECIPIENT_UNAVAILABLE"
+    assert gateway.calls == []
 
 
 def test_suppressed_verdict_cannot_cross_notification_contract() -> None:

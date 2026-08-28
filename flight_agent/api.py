@@ -23,6 +23,7 @@ from flight_agent.trip_contracts import (
     SchedulerTickRequest,
     StoredTripView,
     TripActivationOutcome,
+    validate_sms_notification_input,
 )
 from flight_agent.trip_orchestrator_client import (
     HttpTripOrchestratorClient,
@@ -125,6 +126,8 @@ def create_api_app(
         trip_id: str = Form(...),
         traveler_ref: str = Form(...),
         fixture_id: str = Form(...),
+        phone_e164: str | None = Form(default=None),
+        sms_consent: bool = Form(default=False),
     ) -> TripActivationOutcome:
         document_bytes = await file.read(MAX_PDF_BYTES + 1)
         if len(document_bytes) > MAX_PDF_BYTES:
@@ -133,6 +136,12 @@ def create_api_app(
             b"%PDF-"
         ):
             raise HTTPException(status_code=415, detail="A PDF upload is required")
+        try:
+            validated_phone = validate_sms_notification_input(
+                phone_e164, sms_consent
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         trip_orchestrator: TripOrchestratorGateway = app.state.trip_gateway
         try:
             return await trip_orchestrator.activate(
@@ -141,6 +150,8 @@ def create_api_app(
                 trip_id=trip_id,
                 traveler_ref=traveler_ref,
                 fixture_id=fixture_id,
+                phone_e164=validated_phone,
+                sms_consent=sms_consent,
             )
         except httpx.HTTPStatusError as error:
             if error.response.status_code == 409:

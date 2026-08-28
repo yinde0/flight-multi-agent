@@ -52,9 +52,11 @@ class GoldenReplayTests(unittest.TestCase):
 
 class ContractAndFixtureTests(unittest.TestCase):
     def test_all_json_files_parse(self):
-        for path in ROOT.rglob("*.json"):
-            with self.subTest(path=path.relative_to(ROOT)):
-                load_json(path)
+        repository_json_roots = (ROOT / "travel_eval", ROOT / "observability")
+        for json_root in repository_json_roots:
+            for path in json_root.rglob("*.json"):
+                with self.subTest(path=path.relative_to(ROOT)):
+                    load_json(path)
 
     def test_json_schemas_declare_draft_and_version(self):
         for path in (ROOT / "travel_eval" / "schemas").glob("*.schema.json"):
