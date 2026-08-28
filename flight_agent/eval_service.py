@@ -16,6 +16,7 @@ from flight_agent.eval_reasoning import (
     PROMPT_VERSION,
     EvalReasoner,
     advisory_record,
+    candidate_trace_evidence,
     reasoner_from_environment,
 )
 from flight_agent.event_delivery import (
@@ -56,8 +57,40 @@ def load_policy() -> SuppressionPolicy:
     return SuppressionPolicy(json.loads(path.read_text(encoding="utf-8")))
 
 
+def eval_agent_trace_input(
+    candidate: dict[str, Any],
+    store: MonitoringStore,
+    policy: SuppressionPolicy,
+) -> dict[str, Any]:
+    return {
+        "task": "Apply suppression policy and authorize or suppress traveler action.",
+        "candidate": candidate_trace_evidence(candidate),
+        "policy": {
+            "policy_version": policy.version,
+            "delay_thresholds": policy.delay_thresholds,
+            "cooldown_minutes": policy.cooldown_minutes,
+        },
+        "candidate_ref": hash_reference(candidate.get("candidate_id", "")),
+    }
+
+
+def eval_agent_trace_output(
+    result: tuple[dict[str, Any], dict[str, Any] | None, str, int | None, bool]
+) -> dict[str, Any]:
+    decision, confirmed_event, _episode_key, severity_band, duplicate = result
+    return {
+        "verdict": decision.get("verdict"),
+        "reason_codes": decision.get("reason_codes", []),
+        "policy_version": decision.get("policy_version"),
+        "confidence": decision.get("confidence"),
+        "severity_band": severity_band,
+        "duplicate_candidate": duplicate,
+        "disruption_confirmed_published": confirmed_event is not None,
+    }
+
+
 @traced(
-    "evaluation.decide",
+    "agent.eval.apply_policy",
     service_name="eval-agent",
     attributes=lambda candidate, store, policy: {
         "travel.candidate_ref": hash_reference(candidate.get("candidate_id", "")),
@@ -68,6 +101,8 @@ def load_policy() -> SuppressionPolicy:
         if result[4]
         else str(result[0].get("verdict", "unknown")).lower()
     ),
+    content_input=eval_agent_trace_input,
+    content_output=eval_agent_trace_output,
 )
 def evaluate_candidate(
     candidate: dict[str, Any],

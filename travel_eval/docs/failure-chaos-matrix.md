@@ -57,7 +57,7 @@
 | F53 | Trace collector is unavailable | Continue business processing; batch exporter may drop telemetry | No disruption-path dependency on observability | Planned integration test |
 | F54 | A traceable operation handles traveler or document evidence | Export only outcome and hashed references | Raw reference absent; content capture forced false | Automated unit |
 | F55 | Development content flag is accidentally set in production | Force content capture off | No prompt, input, or output attributes attached | Automated unit |
-| F56 | Explicit development content tracing uses a synthetic document | Show flow instruction, input, and canonical output | `document.parse` has non-empty LangSmith inputs and outputs | Automated unit + networked LangSmith runner |
+| F56 | Explicit development content tracing uses a synthetic document | Show a redacted agent task, input, and canonical output | `agent.document.parse_itinerary` has non-empty LangSmith inputs and outputs | Automated unit + networked LangSmith runner |
 | F57 | A scheduled poll runs after activation or process restart | Restore the trip's persisted W3C carrier | Scheduler and activation spans share one trace ID | Automated unit + networked vertical-10 runner |
 | F58 | An outbox publish fails and later retries | Reuse the persisted trace carrier | Retried publish remains in the originating trace | Automated unit |
 | F59 | Incoming trace headers are absent or malformed | Start a valid new trace without affecting business work | Request succeeds; returned trace ID is valid | Automated middleware unit |
@@ -66,5 +66,14 @@
 | F62 | CrewAI returns malformed, wrapped, or schema-invalid output | Reject the advisory | `EVAL_REASONING_FAILED`; no model-authorized action | Automated unit |
 | F63 | CrewAI recommendation disagrees with deterministic policy | Store disagreement for evaluation only | Persisted authoritative decision remains deterministic | Automated unit + golden shadow runner |
 | F64 | A confirmed event or scheduler tick is duplicated while shadow reasoning is enabled | Apply existing idempotency controls | One notification and one search provider consequence | Automated unit + networked vertical-10 runner |
+| F65 | LangSmith receives internal HTTP transport traffic | Continue W3C context but hide transport spans | Trace tree is rooted at `agent.orchestrator.trip_pipeline`; no generic POST runs | Automated unit + networked LangSmith runner |
+| F66 | Familiar itinerary already parses deterministically | Skip the document LLM | Parsed result has `llm_calls=0` | Automated unit |
+| F67 | Document LLM cites evidence absent from the ticket | Reject the extraction | `review_required`; `LLM_EXTRACTION_FAILED` | Automated unit |
+| F68 | Document LLM confidence is below the configured threshold | Reject the extraction | `review_required`; no canonical itinerary | Automated unit |
+| F69 | Azure OpenAI is unconfigured, unavailable, refuses, or returns malformed output | Fail closed without changing document authority | `review_required`; no downstream monitoring activation | Automated unit + local contract vertical |
+| F70 | Friendly-language model invents rebooking, refund, compensation, guarantee, URL, or unsupported number | Reject wording and continue with deterministic message | `EXPLANATION_LLM_UNSAFE`; authorized notification is not blocked | Automated unit |
+| F71 | Azure explanation request fails, refuses, times out, or returns malformed JSON | Continue with deterministic message | `EXPLANATION_LLM_FAILED`; one authorized notification | Automated unit |
+| F72 | Communication Agent is unavailable after Eval approval | Notification Action Service uses its local deterministic message | `EXPLANATION_AGENT_UNAVAILABLE`; one authorized notification | Automated unit + vertical contract |
+| F73 | Confirmed event is redelivered after a friendly message was generated | Return the stored notification action | No second model call and no second provider action | Automated notification idempotency test |
 
 Planned tests become release gates when their corresponding service is introduced. A missing downstream dependency must fail closed: evidence may queue, but notification authority must never move upstream to the monitor or evaluator.

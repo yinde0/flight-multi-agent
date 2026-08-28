@@ -13,7 +13,7 @@ from dotenv import dotenv_values
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TRACE_NAME = "document.parse"
+TRACE_NAME = "agent.document.parse_itinerary"
 
 
 def find_trace(value: object) -> dict[str, Any] | None:

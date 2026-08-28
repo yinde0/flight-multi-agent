@@ -39,6 +39,15 @@ def _initialize_session() -> None:
         "pending_trip_id": None,
         "pending_fixture_id": None,
         "sms_enabled": False,
+        "agency_demo_enabled": os.getenv(
+            "FLIGHT_AGENCY_DEMO_ENABLED", "false"
+        ).lower()
+        in {"1", "true", "yes"},
+        "agency_demo_trip_id": None,
+        "agency_demo_flights": [],
+        "agency_demo_last_check": None,
+        "agency_demo_pending_change": False,
+        "agency_demo_error": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -58,6 +67,11 @@ def _clear_trip() -> None:
     st.session_state.pending_trip_id = None
     st.session_state.pending_fixture_id = None
     st.session_state.sms_enabled = False
+    st.session_state.agency_demo_trip_id = None
+    st.session_state.agency_demo_flights = []
+    st.session_state.agency_demo_last_check = None
+    st.session_state.agency_demo_pending_change = False
+    st.session_state.agency_demo_error = None
     st.session_state.traveler_ref = f"traveler-{secrets.token_hex(8)}"
 
 
@@ -94,6 +108,12 @@ def _render_sidebar(client: TravelApiClient) -> None:
             st.caption("Keep this private. Account-based trip recovery comes next.")
             if st.session_state.sms_enabled:
                 st.success("Important SMS alerts enabled", icon=":material/sms:")
+
+        if st.session_state.agency_demo_enabled:
+            st.info(
+                "Flight agency sandbox active",
+                icon=":material/airline_seat_recline_normal:",
+            )
 
         st.divider()
         st.caption(
@@ -202,6 +222,19 @@ def _render_upload(client: TravelApiClient) -> None:
             st.error(str(error), icon=":material/error:")
             return
         st.write("Turning each flight into a monitoring watch")
+        if st.session_state.agency_demo_enabled and outcome.get("itinerary"):
+            st.write("Creating the matching flight in the demo control tower")
+            try:
+                synced = client.sync_agency_trip(trip_id)
+                st.session_state.agency_demo_trip_id = trip_id
+                st.session_state.agency_demo_flights = synced.get("flights", [])
+                st.write("Storing the first on-time monitoring baseline")
+                st.session_state.agency_demo_last_check = (
+                    client.run_agency_demo_check(trip_id)
+                )
+                st.session_state.agency_demo_error = None
+            except TravelApiError as error:
+                st.session_state.agency_demo_error = str(error)
         status.update(label="Your trip is ready", state="complete", expanded=False)
 
     st.session_state.customer_name = clean_name
@@ -209,6 +242,252 @@ def _render_upload(client: TravelApiClient) -> None:
     st.session_state.active_trip = outcome
     st.session_state.sms_enabled = sms_consent
     st.toast("Your flights are now being watched", icon=":material/check_circle:")
+
+
+def _scenario_change(scenario: str, flight: dict[str, Any]) -> dict[str, Any] | None:
+    if scenario == "On time":
+        return None
+    if scenario == "Gate change":
+        current = str(flight.get("departure_gate") or "A10")
+        return {
+            "departure_gate": "C14" if current != "C14" else "A10",
+            "note": "Operator moved the departure gate",
+        }
+    if scenario == "15 minute delay":
+        return {
+            "status": "scheduled",
+            "departure_delay_minutes": 15,
+            "arrival_delay_minutes": 15,
+            "note": "Minor operational delay",
+        }
+    if scenario == "45 minute delay":
+        return {
+            "status": "scheduled",
+            "departure_delay_minutes": 45,
+            "arrival_delay_minutes": 45,
+            "note": "Material operational delay",
+        }
+    if scenario == "90 minute delay":
+        return {
+            "status": "scheduled",
+            "departure_delay_minutes": 90,
+            "arrival_delay_minutes": 90,
+            "note": "Severe operational delay",
+        }
+    if scenario == "Cancelled":
+        return {"status": "cancelled", "note": "Flight cancelled by operator"}
+    return {"status": "diverted", "note": "Flight diverted by operator"}
+
+
+def _store_agency_flight(updated: dict[str, Any]) -> None:
+    flights = st.session_state.agency_demo_flights
+    st.session_state.agency_demo_flights = [
+        updated
+        if item.get("flight_iata") == updated.get("flight_iata")
+        and item.get("flight_date") == updated.get("flight_date")
+        else item
+        for item in flights
+        if isinstance(item, dict)
+    ]
+
+
+def _render_agency_check(payload: dict[str, Any] | None) -> None:
+    if not isinstance(payload, dict):
+        st.caption("The next monitoring result will appear here.")
+        return
+    results = payload.get("results")
+    result = results[0] if isinstance(results, list) and results else {}
+    monitoring_status = str(result.get("monitoring_status") or "No flight was due")
+    category = str(result.get("category") or "No disruption")
+    verdict = str(result.get("verdict") or "No decision required")
+    with st.container(horizontal=True, wrap=True):
+        st.metric("Monitor result", monitoring_status.replace("_", " "), border=True)
+        st.metric("Candidate", category.replace("_", " "), border=True)
+        st.metric("Evaluation", verdict.replace("_", " "), border=True)
+    if verdict == "SUPPRESS":
+        st.info(
+            "The evaluator saw the change and deliberately kept the traveler quiet.",
+            icon=":material/notifications_off:",
+        )
+    elif verdict in {"NOTIFY", "NOTIFY_AND_SEARCH"}:
+        notification = str(result.get("notification_status") or "pending")
+        search = str(result.get("search_status") or "not required")
+        st.success(
+            f"Notification: {notification} · Rebooking search: {search}",
+            icon=":material/notification_important:",
+        )
+        message = str(result.get("notification_message") or "").strip()
+        if message:
+            st.info(message, icon=":material/chat_bubble:")
+    elif monitoring_status == "baseline_stored":
+        st.success(
+            "The on-time flight is now the comparison baseline.",
+            icon=":material/database:",
+        )
+
+
+def _render_agency_demo(client: TravelApiClient) -> None:
+    st.subheader("Flight agency control tower", anchor=False)
+    st.caption(
+        "Change the airline’s flight record, run one monitoring check, and watch the "
+        "real evaluator decide whether the traveler should be disturbed."
+    )
+
+    trip_id = str(st.session_state.active_trip_id)
+    if st.session_state.agency_demo_trip_id != trip_id:
+        if st.button(
+            "Connect this trip to the control tower",
+            icon=":material/link:",
+            type="primary",
+        ):
+            try:
+                with st.status("Preparing the flight agency sandbox…") as status:
+                    synced = client.sync_agency_trip(trip_id)
+                    st.session_state.agency_demo_trip_id = trip_id
+                    st.session_state.agency_demo_flights = synced.get("flights", [])
+                    st.session_state.agency_demo_last_check = (
+                        client.run_agency_demo_check(trip_id)
+                    )
+                    status.update(label="Control tower ready", state="complete")
+                st.rerun()
+            except TravelApiError as error:
+                st.error(str(error), icon=":material/cloud_off:")
+        return
+
+    flights = [
+        item
+        for item in st.session_state.agency_demo_flights
+        if isinstance(item, dict)
+    ]
+    if not flights:
+        st.warning("No simulated flight is connected to this itinerary.")
+        return
+
+    flight_options = {
+        f"{item.get('flight_iata')} · {item.get('origin')} → {item.get('destination')}": item
+        for item in flights
+    }
+    selected_label = st.selectbox(
+        "Flight to control",
+        options=list(flight_options),
+        key="agency_demo_selected_flight",
+    )
+    flight = flight_options[selected_label]
+    status_value = str(flight.get("status") or "unknown")
+    delay = int(flight.get("departure_delay_minutes") or 0)
+    gate = str(flight.get("departure_gate") or "—")
+    revision = int(flight.get("revision") or 1)
+    with st.container(horizontal=True, wrap=True):
+        st.metric("Airline status", status_value.title(), border=True)
+        st.metric("Departure delay", f"{delay} min", border=True)
+        st.metric("Departure gate", gate, border=True)
+        st.metric("Agency revision", revision, border=True)
+
+    scenario_help = {
+        "On time": "Restore the original booked schedule.",
+        "Gate change": "Expected: detected, but suppressed without an alert.",
+        "15 minute delay": "Expected: below the 30-minute notification threshold.",
+        "45 minute delay": "Expected: notify the traveler without searching.",
+        "90 minute delay": "Expected: notify and search for alternatives.",
+        "Cancelled": "Expected: notify and search for alternatives.",
+        "Diverted": "Expected: notify and search for alternatives.",
+    }
+    with st.form("agency_scenario_form", border=True):
+        scenario = st.selectbox("Choose an airline update", list(scenario_help))
+        st.caption(scenario_help[scenario])
+        apply_scenario = st.form_submit_button(
+            "Apply flight update",
+            icon=":material/edit_calendar:",
+            type="primary",
+        )
+
+    if apply_scenario:
+        try:
+            if scenario == "On time":
+                updated = client.reset_agency_flight(
+                    str(flight["flight_iata"]), str(flight["flight_date"])
+                )
+            else:
+                updated = client.change_agency_flight(
+                    str(flight["flight_iata"]),
+                    str(flight["flight_date"]),
+                    _scenario_change(scenario, flight) or {},
+                )
+            _store_agency_flight(updated)
+            st.session_state.agency_demo_pending_change = True
+            st.toast(
+                "Airline record changed. Travel Watch has not checked it yet.",
+                icon=":material/flight_takeoff:",
+            )
+            st.rerun()
+        except TravelApiError as error:
+            st.error(str(error), icon=":material/error:")
+
+    if st.session_state.agency_demo_pending_change:
+        st.warning(
+            "A new airline update is waiting. Run the monitor to see what happens.",
+            icon=":material/pending_actions:",
+        )
+    if st.button(
+        "Run monitoring check",
+        icon=":material/radar:",
+        type="primary" if st.session_state.agency_demo_pending_change else "secondary",
+    ):
+        try:
+            with st.status("Running the multi-agent path…", expanded=True) as status:
+                st.write("Monitoring Agent is comparing the airline revision")
+                outcome = client.run_agency_demo_check(trip_id)
+                st.write("Eval Agent is applying suppression and escalation rules")
+                status.update(label="Monitoring check complete", state="complete")
+            st.session_state.agency_demo_last_check = outcome
+            st.session_state.agency_demo_pending_change = False
+            st.session_state.active_trip = client.get_trip(trip_id)
+            st.rerun()
+        except TravelApiError as error:
+            st.error(str(error), icon=":material/cloud_off:")
+
+    with st.container(border=True):
+        st.markdown("**Latest system decision**")
+        _render_agency_check(st.session_state.agency_demo_last_check)
+
+    with st.expander("Advanced manual edit"):
+        with st.form("agency_manual_form", border=False):
+            manual_status = st.selectbox(
+                "Flight status",
+                ["scheduled", "active", "landed", "cancelled", "diverted"],
+                index=["scheduled", "active", "landed", "cancelled", "diverted"].index(
+                    status_value if status_value in {
+                        "scheduled", "active", "landed", "cancelled", "diverted"
+                    } else "scheduled"
+                ),
+            )
+            manual_delay = st.number_input(
+                "Departure delay in minutes", min_value=0, max_value=720, value=delay
+            )
+            manual_gate = st.text_input(
+                "Departure gate", value=gate if gate != "—" else "A10", max_chars=12
+            )
+            manual_submit = st.form_submit_button(
+                "Save manual update", icon=":material/save:"
+            )
+        if manual_submit:
+            try:
+                updated = client.change_agency_flight(
+                    str(flight["flight_iata"]),
+                    str(flight["flight_date"]),
+                    {
+                        "status": manual_status,
+                        "departure_delay_minutes": int(manual_delay),
+                        "arrival_delay_minutes": int(manual_delay),
+                        "departure_gate": manual_gate.strip() or "A10",
+                        "note": "Manual operator update",
+                    },
+                )
+                _store_agency_flight(updated)
+                st.session_state.agency_demo_pending_change = True
+                st.rerun()
+            except TravelApiError as error:
+                st.error(str(error), icon=":material/error:")
 
 
 def _render_review(payload: dict[str, Any]) -> None:
@@ -319,6 +598,9 @@ def _render_trip(client: TravelApiClient) -> None:
     if status_value == "review_required":
         _render_review(payload)
     _render_itinerary(payload)
+
+    if st.session_state.agency_demo_enabled and status_value != "review_required":
+        _render_agency_demo(client)
 
     stored_legs = payload.get("legs")
     if isinstance(stored_legs, list) and stored_legs:

@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from flight_agent.notification import RecordingNotificationProvider
+from flight_agent.disruption_explanation import DisruptionExplanation
 from flight_agent.notification_action_service import process_confirmed_event
 from flight_agent.notification_contracts import (
     ConfirmedDisruptionEvent,
@@ -24,6 +25,10 @@ class NotificationMemoryStore:
         self.decisions: dict[str, dict[str, Any]] = {}
         self.confirmed: dict[str, dict[str, Any]] = {}
         self.notifications: dict[str, dict[str, Any]] = {}
+        self.candidates: dict[str, dict[str, Any]] = {}
+
+    def get_candidate(self, candidate_id):
+        return copy.deepcopy(self.candidates.get(candidate_id))
 
     def get_decision(self, candidate_id):
         return copy.deepcopy(self.decisions.get(candidate_id))
@@ -64,6 +69,24 @@ class StaticRecipientResolver:
         )
 
 
+class StaticCommunicationAgent:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def explain(self, request):
+        self.calls.append(request)
+        return DisruptionExplanation(
+            message=(
+                "Your flight is now delayed by 45 minutes. "
+                "We'll keep watching for further changes."
+            ),
+            status="generated",
+            source="azure_openai",
+            model="fixture-gpt-deployment",
+            confidence=0.98,
+        )
+
+
 def confirmed_event() -> dict[str, Any]:
     return {
         "schema_version": "1.0.0",
@@ -94,6 +117,11 @@ def authorized_store() -> NotificationMemoryStore:
         "policy_version": "1.2.0",
         "decided_at": event["published_at"],
     }
+    store.candidates[event["candidate_id"]] = {
+        "candidate_id": event["candidate_id"],
+        "category": "DELAY",
+        "delay_minutes": 45,
+    }
     return store
 
 
@@ -114,6 +142,38 @@ def test_verified_confirmed_event_reaches_notification_provider_once() -> None:
     assert len(gateway.calls) == 1
     assert gateway.calls[0].recipient_ref == "traveler:trip-v5"
     assert store.notifications[first.decision_id]["status"] == "delivered"
+
+
+def test_friendly_explanation_is_added_only_after_eval_approval() -> None:
+    store = authorized_store()
+    gateway = RecordingGateway()
+    communicator = StaticCommunicationAgent()
+
+    result = process_confirmed_event(
+        confirmed_event(),
+        store=store,
+        notifier=gateway,
+        communicator=communicator,
+        authority_timeout_seconds=0,
+    )
+    replay = process_confirmed_event(
+        confirmed_event(),
+        store=store,
+        notifier=gateway,
+        communicator=communicator,
+        authority_timeout_seconds=0,
+    )
+
+    assert result.explanation_status == "generated"
+    assert result.explanation_source == "azure_openai"
+    assert result.friendly_message and "45 minutes" in result.friendly_message
+    assert gateway.calls[0].template_variables["friendly_message"] == (
+        result.friendly_message
+    )
+    assert len(communicator.calls) == 1
+    assert communicator.calls[0].delay_minutes == 45
+    assert replay == result
+    assert len(gateway.calls) == 1
 
 
 def test_forged_event_is_rejected_before_notification_mcp() -> None:

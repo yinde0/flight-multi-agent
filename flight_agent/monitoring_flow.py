@@ -380,6 +380,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "dynamodb.diff_last_evidence",
                         "nats.publish_disruption_candidate",
                         "eval_agent.consume_candidate",
+                        "a2a.communication.explain_disruption",
                         "notification_action.consume_confirmed",
                         "flight_search_action.consume_confirmed",
                     ],
@@ -435,14 +436,84 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
         return self.state.outcome
 
 
+def monitoring_agent_trace_input(
+    request: MonitoringPollRequest, **_kwargs: Any
+) -> dict[str, Any]:
+    return {
+        "task": "Compare current flight and weather evidence with saved state.",
+        "flight": {
+            "flight_iata": request.flight_iata,
+            "flight_date": request.flight_date,
+        },
+        "correlation": {
+            "trip_ref": hash_reference(request.trip_id),
+            "leg_ref": hash_reference(request.leg_id),
+        },
+        "replay_requested": request.replay_key is not None,
+    }
+
+
+def monitoring_agent_trace_output(result: dict[str, Any]) -> dict[str, Any]:
+    observation = result.get("observation") or {}
+    departure = observation.get("departure") or {}
+    weather = observation.get("weather") or {}
+    candidate = result.get("candidate") or {}
+    decision = result.get("decision") or {}
+    orchestration = result.get("orchestration") or {}
+    return {
+        "status": result.get("status"),
+        "observation": {
+            "source": observation.get("source"),
+            "observed_at": observation.get("observed_at"),
+            "status": observation.get("status"),
+            "departure_airport": observation.get("departure_airport"),
+            "destination_airport": observation.get("destination_airport"),
+            "scheduled_departure_at": departure.get("scheduled_at"),
+            "estimated_departure_at": departure.get("estimated_at"),
+            "gate": departure.get("gate"),
+            "weather_risk_level": weather.get("risk_level"),
+            "confidence": observation.get("confidence"),
+        },
+        "candidate": {
+            "candidate_ref": (
+                hash_reference(candidate.get("candidate_id"))
+                if candidate.get("candidate_id")
+                else None
+            ),
+            "category": candidate.get("category"),
+            "delay_minutes": candidate.get("delay_minutes"),
+            "weather_risk_level": candidate.get("weather_risk_level"),
+            "score": candidate.get("score"),
+            "confidence": candidate.get("confidence"),
+        },
+        "decision": {
+            "verdict": decision.get("verdict"),
+            "reason_codes": decision.get("reason_codes", []),
+            "policy_version": decision.get("policy_version"),
+        },
+        "actions": {
+            "notification": (
+                orchestration.get("notification_action") or {}
+            ).get("status"),
+            "search": (orchestration.get("search_action") or {}).get("status"),
+            "candidate_events_published": orchestration.get(
+                "candidate_events_published"
+            ),
+        },
+        "error_code": result.get("error_code"),
+    }
+
+
 @traced(
-    "monitoring.poll",
+    "agent.monitor.detect_disruption",
     service_name="monitor-agent",
     attributes=lambda request, **kwargs: {
         "travel.trip_ref": hash_reference(request.trip_id),
         "travel.leg_ref": hash_reference(request.leg_id),
     },
     result_outcome=lambda result: str(result.get("status", "unknown")),
+    content_input=monitoring_agent_trace_input,
+    content_output=monitoring_agent_trace_output,
 )
 def run_monitoring_flow(
     request: MonitoringPollRequest,

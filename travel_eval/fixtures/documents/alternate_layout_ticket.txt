@@ -1,0 +1,6 @@
+NORTHBOUND AIR BOOKING CONFIRMATION
+Booking ID: ZXCV12
+Journey: London Heathrow (LHR) to Amsterdam Schiphol (AMS)
+Flight: NB204
+Departure: 15 September 2026 at 08:00 BST
+Arrival: 15 September 2026 at 10:15 CEST

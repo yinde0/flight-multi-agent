@@ -23,6 +23,21 @@ _content_capture_enabled = False
 _service_name = "travel-service"
 _operation_counts: Counter[tuple[str, str]] = Counter()
 TRACE_CONTEXT_HEADERS = ("traceparent", "tracestate")
+HTTP_TRACE_EXCLUDED_PATHS = frozenset(
+    {
+        "/health/live",
+        "/metrics",
+        "/v1/observability/status",
+    }
+)
+HTTP_TRACE_MODE_ENV = "OTEL_HTTP_TRACE_MODE"
+HTTP_AGENT_ROOTS = {
+    (
+        "travel-api",
+        "POST",
+        "/v1/trips/activate",
+    ): "agent.orchestrator.trip_pipeline",
+}
 
 
 def _enabled(name: str) -> bool:
@@ -147,6 +162,54 @@ def _set_span_content(span: Any, direction: str, value: Any) -> None:
     except Exception:
         # Observability must remain fail-open for business processing.
         return
+
+
+def set_current_span_content(
+    *, input_value: Any = None, output_value: Any = None
+) -> None:
+    """Attach a safe business view to the active application span."""
+
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+    except Exception:
+        return
+    _set_span_content(span, "input", input_value)
+    _set_span_content(span, "output", output_value)
+
+
+def set_current_span_attributes(attributes: Mapping[str, Any]) -> None:
+    """Attach low-cardinality business attributes to the active span."""
+
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        for key, value in attributes.items():
+            if value is not None and isinstance(value, (str, bool, int, float)):
+                span.set_attribute(key, value)
+    except Exception:
+        return
+
+
+def _http_trace_operation(
+    *, service_name: str, method: str, path: str
+) -> tuple[str, bool] | None:
+    """Resolve whether an HTTP request should be a visible LangSmith run.
+
+    ``all`` preserves the generic OTEL behavior used by the local observability
+    stack. ``agent_roots`` keeps only selected public workflow entry points,
+    while ``off`` retains context propagation without creating transport runs.
+    """
+
+    mode = os.getenv(HTTP_TRACE_MODE_ENV, "all").strip().lower()
+    if mode == "off":
+        return None
+    if mode == "agent_roots":
+        operation = HTTP_AGENT_ROOTS.get((service_name, method.upper(), path))
+        return (operation, True) if operation else None
+    return ("http.server", False)
 
 
 def configure_telemetry(service_name: str) -> bool:
@@ -422,8 +485,24 @@ def install_trace_middleware(app: Any, *, service_name: str) -> None:
 
     async def distributed_trace_middleware(request, call_next):
         with extracted_trace_context(request.headers):
+            operation = (
+                None
+                if request.url.path in HTTP_TRACE_EXCLUDED_PATHS
+                else _http_trace_operation(
+                    service_name=service_name,
+                    method=request.method,
+                    path=request.url.path,
+                )
+            )
+            if operation is None:
+                response = await call_next(request)
+                active_trace_id = current_trace_id()
+                if active_trace_id:
+                    response.headers["X-Trace-Id"] = active_trace_id
+                return response
+            operation_name, agent_root = operation
             with trace_operation(
-                "http.server",
+                operation_name,
                 service_name=service_name,
                 kind="chain",
                 attributes={"http.request.method": request.method},
@@ -432,9 +511,29 @@ def install_trace_middleware(app: Any, *, service_name: str) -> None:
                 route = request.scope.get("route")
                 route_path = getattr(route, "path", None)
                 if span is not None:
+                    resolved_route = str(route_path or request.url.path)
+                    if not agent_root:
+                        try:
+                            span.update_name(f"{request.method} {resolved_route}")
+                        except Exception:
+                            pass
                     span.set_attribute("http.response.status_code", response.status_code)
                     if route_path:
                         span.set_attribute("http.route", str(route_path))
+                    if not agent_root:
+                        _set_span_content(
+                            span,
+                            "input",
+                            {
+                                "method": request.method,
+                                "route": resolved_route,
+                            },
+                        )
+                        _set_span_content(
+                            span,
+                            "output",
+                            {"status_code": response.status_code},
+                        )
                 active_trace_id = current_trace_id()
                 if active_trace_id:
                     response.headers["X-Trace-Id"] = active_trace_id

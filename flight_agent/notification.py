@@ -77,7 +77,10 @@ def render_sms_body(command: NotificationCommand) -> str:
         "WEATHER_RISK": "Severe weather may affect your flight.",
         "STATUS_CHANGE": "A significant flight-status change was detected.",
     }
-    detail = messages.get(category, "A significant travel disruption was detected.")
+    friendly = command.template_variables.get("friendly_message", "").strip()
+    detail = friendly or messages.get(
+        category, "A significant travel disruption was detected."
+    )
     next_step = (
         " We are checking alternative flights."
         if command.search_requested

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import os
 
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ from fastapi import FastAPI, Header, HTTPException
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESPONSE_FIXTURE = (
+DEFAULT_RESPONSE_FIXTURE = (
     ROOT
     / "travel_eval"
     / "fixtures"
@@ -23,7 +24,8 @@ PDF_DATA_PREFIX = "data:application/pdf;base64,"
 
 
 def _fixture_response() -> dict[str, Any]:
-    return json.loads(RESPONSE_FIXTURE.read_text(encoding="utf-8"))
+    path = Path(os.getenv("MISTRAL_OCR_STUB_FIXTURE", str(DEFAULT_RESPONSE_FIXTURE)))
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def create_mistral_ocr_stub() -> FastAPI:

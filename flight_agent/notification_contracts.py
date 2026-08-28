@@ -123,6 +123,12 @@ class NotificationActionRecord(BaseModel):
     recorded_at: str
     delivery_updated_at: str | None = None
     error_code: str | None = None
+    friendly_message: str | None = Field(default=None, max_length=300)
+    explanation_status: Literal["generated", "fallback"] | None = None
+    explanation_source: Literal["azure_openai", "deterministic"] | None = None
+    explanation_model: str | None = None
+    explanation_prompt_version: str | None = None
+    explanation_error_code: str | None = None
 
 
 class TwilioSmsStatusCallback(BaseModel):

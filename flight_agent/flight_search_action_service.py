@@ -58,10 +58,42 @@ def _record(
     )
 
 
+def search_agent_trace_input(
+    event_payload: dict, **_kwargs
+) -> dict[str, object]:
+    return {
+        "task": "Verify Eval approval and search for feasible rebooking options.",
+        "event": {
+            "candidate_ref": hash_reference(event_payload.get("candidate_id", "")),
+            "decision_ref": hash_reference(event_payload.get("decision_id", "")),
+            "trip_ref": hash_reference(event_payload.get("trip_id", "")),
+            "leg_ref": hash_reference(event_payload.get("leg_id", "")),
+            "category": event_payload.get("category"),
+            "verdict": event_payload.get("verdict"),
+            "reason_codes": event_payload.get("reason_codes", []),
+        },
+    }
+
+
+def search_agent_trace_output(
+    result: FlightSearchActionRecord,
+) -> dict[str, object]:
+    return {
+        "status": result.status,
+        "verdict": result.verdict,
+        "provider": result.provider,
+        "source_scope": result.source_scope,
+        "alternative_count": len(result.alternatives),
+        "availability_verified": result.availability_verified,
+        "booking_authorized": result.booking_authorized,
+        "error_code": result.error_code,
+    }
+
+
 @traced(
-    "search.action",
+    "agent.orchestrator.search_rebooking",
     service_name="flight-search-action-service",
-    kind="tool",
+    kind="chain",
     attributes=lambda event_payload, **kwargs: {
         "travel.decision_ref": hash_reference(
             event_payload.get("decision_id", "")
@@ -69,6 +101,8 @@ def _record(
         "travel.trip_ref": hash_reference(event_payload.get("trip_id", "")),
     },
     result_outcome=lambda result: result.status,
+    content_input=search_agent_trace_input,
+    content_output=search_agent_trace_output,
 )
 def process_search_event(
     event_payload: dict,

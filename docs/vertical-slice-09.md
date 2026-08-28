@@ -203,7 +203,7 @@ docker compose -f compose.yaml -f compose.langsmith.yaml -f compose.langsmith-de
 ```
 
 The runner uploads only `synthetic_direct_eticket.pdf`, verifies that
-`document.parse` appears in the configured LangSmith project, and checks that
+`agent.document.parse_itinerary` appears in the configured LangSmith project, and checks that
 both inputs and outputs are visible without printing them in the terminal.
 Remove the development overlay and recreate the normal stack after inspection:
 

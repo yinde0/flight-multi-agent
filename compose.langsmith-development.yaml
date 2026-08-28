@@ -6,9 +6,75 @@ services:
       OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
       TRACELOOP_TRACE_CONTENT: "true"
 
+  travel-api:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  trip-orchestrator:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  monitor-agent:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
   eval-agent:
     environment:
       DEPLOYMENT_ENVIRONMENT: development
       OTEL_TRACE_CONTENT_ENABLED: "true"
       OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
       TRACELOOP_TRACE_CONTENT: "true"
+
+  notification-action-service:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  communication-agent:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  flight-search-action-service:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  flight-status-mcp:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  weather-mcp:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  notification-mcp:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  flight-search-mcp:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}
+
+  operations-service:
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      OTEL_TRACE_CONTENT_ENABLED: "true"
+      OTEL_TRACE_CONTENT_MAX_CHARS: ${OTEL_TRACE_CONTENT_MAX_CHARS:-12000}

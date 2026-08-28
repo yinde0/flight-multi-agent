@@ -9,7 +9,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from flight_agent.telemetry import traced
+from flight_agent.telemetry import hash_reference, traced
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,11 +44,10 @@ class EvalReasoner(Protocol):
     ) -> EvalAdvisory: ...
 
 
-def _candidate_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
+def candidate_trace_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
     """Whitelist operational evidence; exclude traveler and provider payloads."""
 
     allowed = (
-        "candidate_id",
         "category",
         "delay_minutes",
         "connection_buffer_minutes",
@@ -59,7 +58,10 @@ def _candidate_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
         "confidence",
         "score",
     )
-    return {key: candidate.get(key) for key in allowed if key in candidate}
+    evidence = {key: candidate.get(key) for key in allowed if key in candidate}
+    if candidate.get("candidate_id"):
+        evidence["candidate_ref"] = hash_reference(candidate["candidate_id"])
+    return evidence
 
 
 def _policy_evidence(policy: dict[str, Any]) -> dict[str, Any]:
@@ -71,6 +73,17 @@ def _policy_evidence(policy: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _decision_evidence(decision: dict[str, Any]) -> dict[str, Any]:
+    allowed = (
+        "verdict",
+        "reason_codes",
+        "policy_version",
+        "confidence",
+        "cooldown_until",
+    )
+    return {key: decision.get(key) for key in allowed if key in decision}
+
+
 def advisory_trace_input(
     candidate: dict[str, Any],
     policy: dict[str, Any],
@@ -78,9 +91,9 @@ def advisory_trace_input(
 ) -> dict[str, Any]:
     return {
         "prompt_version": PROMPT_VERSION,
-        "candidate": _candidate_evidence(candidate),
+        "candidate": candidate_trace_evidence(candidate),
         "policy": _policy_evidence(policy),
-        "deterministic_decision": deterministic_decision,
+        "deterministic_decision": _decision_evidence(deterministic_decision),
     }
 
 
@@ -166,7 +179,7 @@ class CrewAIEvalReasoner:
         )
 
     @traced(
-        "evaluation.crewai_advisory",
+        "agent.eval.review_with_crewai",
         service_name="eval-agent",
         kind="chain",
         attributes=lambda self, candidate, policy, deterministic_decision: {
@@ -189,13 +202,17 @@ class CrewAIEvalReasoner:
 
         description = self._prompt_template.format(
             candidate_json=json.dumps(
-                _candidate_evidence(candidate), sort_keys=True, separators=(",", ":")
+                candidate_trace_evidence(candidate),
+                sort_keys=True,
+                separators=(",", ":"),
             ),
             policy_json=json.dumps(
                 _policy_evidence(policy), sort_keys=True, separators=(",", ":")
             ),
             decision_json=json.dumps(
-                deterministic_decision, sort_keys=True, separators=(",", ":")
+                _decision_evidence(deterministic_decision),
+                sort_keys=True,
+                separators=(",", ":"),
             ),
             advisory_schema_json=json.dumps(
                 EvalAdvisory.model_json_schema(),

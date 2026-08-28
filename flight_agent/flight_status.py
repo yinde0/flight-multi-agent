@@ -21,6 +21,7 @@ from flight_agent.monitoring_contracts import (
 
 
 DEFAULT_AVIATIONSTACK_BASE_URL = "https://api.aviationstack.com/v1"
+DEFAULT_FLIGHT_AGENCY_BASE_URL = "http://flight-agency-simulator:8015"
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPLAY_FIXTURE = (
     ROOT / "travel_eval" / "fixtures" / "monitoring" / "vertical_03_timeline.json"
@@ -99,6 +100,59 @@ class ReplayFlightStatusProvider:
         return ProviderFlightObservation.model_validate(
             deepcopy(self._observations[index])
         )
+
+
+class FlightAgencyStatusProvider:
+    """Read canonical observations from the private, operator-controlled sandbox."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str = DEFAULT_FLIGHT_AGENCY_BASE_URL,
+        control_token: str,
+        timeout_seconds: float = 15.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._control_token = control_token
+        self._timeout_seconds = timeout_seconds
+        self._transport = transport
+
+    def get_flight_status(
+        self,
+        *,
+        flight_iata: str,
+        flight_date: str,
+        replay_key: str | None = None,
+    ) -> ProviderFlightObservation:
+        del replay_key
+        if not self._control_token:
+            raise FlightStatusProviderError("Flight agency control token is required")
+        try:
+            with httpx.Client(
+                timeout=self._timeout_seconds,
+                transport=self._transport,
+                trust_env=False,
+            ) as client:
+                response = client.get(
+                    f"{self._base_url}/v1/provider/flights/"
+                    f"{flight_iata.upper()}/{flight_date}",
+                    headers={"X-Flight-Agency-Token": self._control_token},
+                )
+        except httpx.HTTPError:
+            raise FlightStatusProviderError(
+                "Flight agency sandbox request failed"
+            ) from None
+        if response.is_error:
+            raise FlightStatusProviderError(
+                f"Flight agency sandbox HTTP {response.status_code}"
+            ) from None
+        try:
+            return ProviderFlightObservation.model_validate(response.json())
+        except (ValueError, ValidationError):
+            raise FlightStatusProviderError(
+                "Flight agency sandbox returned an invalid observation"
+            ) from None
 
 
 class AviationStackFlightStatusProvider:
@@ -310,6 +364,16 @@ def provider_from_environment() -> FlightStatusProvider:
             os.getenv("FLIGHT_STATUS_REPLAY_FIXTURE", str(DEFAULT_REPLAY_FIXTURE))
         )
         return ReplayFlightStatusProvider(fixture_path)
+    if provider_name == "agency":
+        return FlightAgencyStatusProvider(
+            base_url=os.getenv(
+                "FLIGHT_AGENCY_BASE_URL", DEFAULT_FLIGHT_AGENCY_BASE_URL
+            ),
+            control_token=os.getenv("FLIGHT_AGENCY_CONTROL_TOKEN", ""),
+            timeout_seconds=float(
+                os.getenv("FLIGHT_AGENCY_TIMEOUT_SECONDS", "15")
+            ),
+        )
     if provider_name != "aviationstack":
         raise FlightStatusProviderError(
             f"Unsupported FLIGHT_STATUS_PROVIDER: {provider_name}"

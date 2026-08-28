@@ -101,6 +101,23 @@ def test_sms_body_contains_no_internal_trip_or_leg_identifiers() -> None:
     assert "leg-twilio-001" not in body
 
 
+def test_sms_body_prefers_validated_friendly_explanation() -> None:
+    command = sms_command().model_copy(
+        update={
+            "template_variables": {
+                "category": "CANCELLATION",
+                "friendly_message": "We’re sorry—your flight has been cancelled.",
+            }
+        }
+    )
+
+    body = render_sms_body(command)
+
+    assert "We’re sorry—your flight has been cancelled." in body
+    assert "checking alternative flights" in body
+    assert "Reply STOP" in body
+
+
 def test_twilio_provider_can_use_explicit_trial_body_without_changing_default() -> None:
     captured: list[httpx.Request] = []
 

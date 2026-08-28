@@ -1,0 +1,41 @@
+services:
+  mistral-ocr-stub:
+    environment:
+      MISTRAL_OCR_STUB_FIXTURE: /app/travel_eval/fixtures/documents/mistral_ocr_alternate_layout_response.json
+
+  azure-openai-stub:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.azure_openai_stub:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8016"
+    expose:
+      - "8016"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8016/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - travel-internal
+
+  document-agent:
+    environment:
+      DOCUMENT_LLM_MODE: fallback
+      AZURE_OPENAI_ENDPOINT: http://azure-openai-stub:8016
+      AZURE_OPENAI_API_KEY: local-azure-openai-test-key
+      AZURE_OPENAI_DEPLOYMENT: fixture-gpt-deployment
+      AZURE_OPENAI_API_VERSION: "2024-10-21"
+      NO_PROXY: mistral-ocr-stub,azure-openai-stub,document-agent,localhost,127.0.0.1
+    depends_on:
+      azure-openai-stub:
+        condition: service_healthy

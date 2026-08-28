@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry import context as otel_context
@@ -19,9 +21,13 @@ from flight_agent.weather_mcp_client import StreamableHttpWeatherMcpClient
 class FakeSpan:
     def __init__(self) -> None:
         self.attributes: dict[str, object] = {}
+        self.name: str | None = None
 
     def set_attribute(self, key: str, value: object) -> None:
         self.attributes[key] = value
+
+    def update_name(self, name: str) -> None:
+        self.name = name
 
 
 def test_content_capture_requires_explicit_development_mode(monkeypatch) -> None:
@@ -143,6 +149,110 @@ def test_http_middleware_supports_plain_starlette_app() -> None:
 
     assert response.status_code == 200
     assert response.headers["x-trace-id"] == "4bf92f3577b34da6a3ce929d0e0e4736"
+
+
+def test_http_middleware_excludes_probes_and_names_real_routes(monkeypatch) -> None:
+    spans: list[FakeSpan] = []
+
+    @contextmanager
+    def fake_trace_operation(*_args, **_kwargs):
+        span = FakeSpan()
+        spans.append(span)
+        yield span
+
+    monkeypatch.setattr(telemetry, "trace_operation", fake_trace_operation)
+    monkeypatch.setattr(telemetry, "_content_capture_enabled", True)
+
+    app = FastAPI()
+    telemetry.install_trace_middleware(app, service_name="route-name-test")
+
+    @app.get("/health/live")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/v1/trips/{trip_id}/check")
+    async def check_trip(trip_id: str) -> dict[str, str]:
+        return {"trip_id": trip_id}
+
+    client = TestClient(app)
+    assert client.get("/health/live").status_code == 200
+    assert spans == []
+
+    response = client.post("/v1/trips/trip-synthetic/check")
+
+    assert response.status_code == 200
+    assert len(spans) == 1
+    assert spans[0].name == "POST /v1/trips/{trip_id}/check"
+    assert spans[0].attributes["http.route"] == "/v1/trips/{trip_id}/check"
+    assert "status_code" in str(
+        spans[0].attributes["gen_ai.completion.0.content"]
+    )
+
+
+def test_langsmith_agent_root_mode_hides_other_http_routes(monkeypatch) -> None:
+    spans: list[tuple[str, FakeSpan]] = []
+
+    @contextmanager
+    def fake_trace_operation(operation, **_kwargs):
+        span = FakeSpan()
+        spans.append((operation, span))
+        yield span
+
+    monkeypatch.setenv("OTEL_HTTP_TRACE_MODE", "agent_roots")
+    monkeypatch.setattr(telemetry, "trace_operation", fake_trace_operation)
+
+    app = FastAPI()
+    telemetry.install_trace_middleware(app, service_name="travel-api")
+
+    @app.post("/v1/trips/activate")
+    async def activate() -> dict[str, str]:
+        return {"status": "activated"}
+
+    @app.post("/v1/internal/post")
+    async def internal_post() -> dict[str, str]:
+        return {"status": "ok"}
+
+    client = TestClient(app)
+    assert client.post("/v1/internal/post").status_code == 200
+    assert spans == []
+    assert client.post("/v1/trips/activate").status_code == 200
+    assert [operation for operation, _span in spans] == [
+        "agent.orchestrator.trip_pipeline"
+    ]
+    assert spans[0][1].name is None
+
+
+def test_http_trace_off_still_propagates_inbound_context(monkeypatch) -> None:
+    spans: list[FakeSpan] = []
+
+    @contextmanager
+    def fake_trace_operation(*_args, **_kwargs):
+        span = FakeSpan()
+        spans.append(span)
+        yield span
+
+    monkeypatch.setenv("OTEL_HTTP_TRACE_MODE", "off")
+    monkeypatch.setattr(telemetry, "trace_operation", fake_trace_operation)
+
+    app = FastAPI()
+    telemetry.install_trace_middleware(app, service_name="internal-service")
+
+    @app.post("/work")
+    async def work() -> dict[str, str | None]:
+        return {"trace_id": telemetry.current_trace_id()}
+
+    response = TestClient(app).post(
+        "/work",
+        headers={
+            "traceparent": (
+                "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"
+            )
+        },
+    )
+
+    assert spans == []
+    assert response.json()["trace_id"] == "1234567890abcdef1234567890abcdef"
+    assert response.headers["x-trace-id"] == "1234567890abcdef1234567890abcdef"
 
 
 def test_concrete_mcp_client_operations_are_traced() -> None:

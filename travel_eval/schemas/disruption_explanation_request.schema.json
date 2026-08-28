@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/disruption_explanation_request.schema.json",
+  "title": "PII-free Confirmed Disruption Explanation Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "category", "verdict", "reason_codes", "search_requested"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "category": {
+      "enum": [
+        "CANCELLATION", "DIVERSION", "CONNECTION_RISK", "DELAY",
+        "GATE_CHANGE", "TERMINAL_CHANGE", "WEATHER_RISK", "STATUS_CHANGE"
+      ]
+    },
+    "verdict": {"enum": ["NOTIFY", "NOTIFY_AND_SEARCH"]},
+    "reason_codes": {
+      "type": "array", "minItems": 1, "maxItems": 5,
+      "items": {"type": "string"}
+    },
+    "delay_minutes": {"type": ["integer", "null"], "minimum": 0, "maximum": 2880},
+    "connection_buffer_minutes": {"type": ["integer", "null"], "minimum": -1440, "maximum": 2880},
+    "minimum_connection_minutes": {"type": ["integer", "null"], "minimum": 0, "maximum": 1440},
+    "weather_risk_level": {
+      "type": ["string", "null"],
+      "enum": ["none", "low", "moderate", "severe", null]
+    },
+    "corroborated_by_weather": {"type": ["boolean", "null"]},
+    "search_requested": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"verdict": {"const": "NOTIFY_AND_SEARCH"}}},
+      "then": {"properties": {"search_requested": {"const": true}}},
+      "else": {"properties": {"search_requested": {"const": false}}}
+    }
+  ]
+}

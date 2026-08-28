@@ -25,42 +25,31 @@ from a2a.types import (
 )
 from fastapi import FastAPI
 
-from flight_agent.contracts import DocumentMetadata
-from flight_agent.flow import run_document_flow
-from flight_agent.itinerary_llm import ItineraryLlmProvider
-from flight_agent.ocr import OcrProvider
+from flight_agent.disruption_explanation import (
+    DisruptionExplanationProvider,
+    DisruptionExplanationRequest,
+    explain_disruption,
+    explanation_provider_from_environment,
+)
 from flight_agent.telemetry import install_telemetry_routes
 
 
-def _request_parts(context: RequestContext) -> tuple[bytes, DocumentMetadata]:
+def _request_data(context: RequestContext) -> DisruptionExplanationRequest:
     if not context.message:
         raise ValueError("A2A message is required")
-
-    document_bytes: bytes | None = None
-    metadata: dict | None = None
     for part in context.message.parts:
-        if part.raw:
-            document_bytes = bytes(part.raw)
         if part.HasField("data"):
             value = MessageToDict(part.data, preserving_proto_field_name=True)
             if isinstance(value, dict):
-                metadata = value
-
-    if not document_bytes or metadata is None:
-        raise ValueError("A PDF raw part and a metadata data part are required")
-    return document_bytes, DocumentMetadata.model_validate(metadata)
+                return DisruptionExplanationRequest.model_validate(value)
+    raise ValueError("A disruption explanation data part is required")
 
 
-class ItineraryDocumentAgentExecutor(AgentExecutor):
+class DisruptionCommunicationAgentExecutor(AgentExecutor):
     def __init__(
-        self,
-        ocr_provider: OcrProvider | None = None,
-        llm_provider: ItineraryLlmProvider | None = None,
-        llm_mode: str | None = None,
+        self, provider: DisruptionExplanationProvider | None = None
     ) -> None:
-        self._ocr_provider = ocr_provider
-        self._llm_provider = llm_provider
-        self._llm_mode = llm_mode
+        self._provider = provider
 
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
@@ -71,19 +60,13 @@ class ItineraryDocumentAgentExecutor(AgentExecutor):
         await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
         await updater.start_work()
-
-        document_bytes, metadata = _request_parts(context)
-        outcome = await asyncio.to_thread(
-            run_document_flow,
-            document_bytes,
-            metadata,
-            self._ocr_provider,
-            self._llm_provider,
-            self._llm_mode,
+        request = _request_data(context)
+        result = await asyncio.to_thread(
+            explain_disruption, request, self._provider
         )
         await updater.add_artifact(
-            parts=[Part(data=ParseDict(outcome, Value()))],
-            name="itinerary_parse_result",
+            parts=[Part(data=ParseDict(result.model_dump(mode="json"), Value()))],
+            name="friendly_disruption_explanation",
             last_chunk=True,
         )
         await updater.complete()
@@ -99,28 +82,31 @@ class ItineraryDocumentAgentExecutor(AgentExecutor):
         await updater.cancel()
 
 
-def build_agent_card(public_url: str) -> AgentCard:
+def build_communication_agent_card(public_url: str) -> AgentCard:
     return AgentCard(
-        name="Travel Document Parsing Agent",
+        name="Travel Disruption Communication Agent",
         description=(
-            "Extracts booked flight legs from text or scanned itinerary PDFs, "
-            "and abstains when decision-critical fields are ambiguous."
+            "Turns an Eval-approved, PII-free disruption fact set into calm traveler "
+            "language. It cannot notify, search, book, cancel, or change a verdict."
         ),
-        version="0.2.0",
+        version="0.1.0",
         capabilities=AgentCapabilities(
             streaming=False,
             push_notifications=False,
         ),
-        default_input_modes=["application/pdf", "application/json"],
+        default_input_modes=["application/json"],
         default_output_modes=["application/json"],
         skills=[
             AgentSkill(
-                id="parse_itinerary_pdf",
-                name="Parse itinerary PDF",
-                description="Return a canonical itinerary or an explicit review request.",
-                tags=["travel", "document", "itinerary", "ocr"],
-                examples=["Parse the attached e-ticket PDF"],
-                input_modes=["application/pdf", "application/json"],
+                id="explain_confirmed_disruption",
+                name="Explain a confirmed disruption",
+                description=(
+                    "Create short, friendly wording from facts already approved by "
+                    "the deterministic Eval policy."
+                ),
+                tags=["travel", "communication", "notification", "llm"],
+                examples=["Explain a confirmed 45-minute delay"],
+                input_modes=["application/json"],
                 output_modes=["application/json"],
             )
         ],
@@ -134,25 +120,30 @@ def build_agent_card(public_url: str) -> AgentCard:
     )
 
 
-def create_document_agent_app(
+def create_communication_agent_app(
     public_url: str | None = None,
-    ocr_provider: OcrProvider | None = None,
-    llm_provider: ItineraryLlmProvider | None = None,
-    llm_mode: str | None = None,
+    *,
+    provider: DisruptionExplanationProvider | None = None,
+    resolve_environment: bool = True,
 ) -> FastAPI:
     resolved_url = public_url or os.getenv(
-        "DOCUMENT_AGENT_PUBLIC_URL", "http://127.0.0.1:8001"
+        "COMMUNICATION_AGENT_PUBLIC_URL", "http://127.0.0.1:8017"
     )
-    card = build_agent_card(resolved_url)
+    resolved_provider = (
+        provider
+        if provider is not None or not resolve_environment
+        else explanation_provider_from_environment()
+    )
+    card = build_communication_agent_card(resolved_url)
     handler = DefaultRequestHandler(
-        agent_executor=ItineraryDocumentAgentExecutor(
-            ocr_provider, llm_provider, llm_mode
-        ),
+        agent_executor=DisruptionCommunicationAgentExecutor(resolved_provider),
         task_store=InMemoryTaskStore(),
         agent_card=card,
     )
-    app = FastAPI(title="Travel Document Parsing Agent", version="0.1.0")
-    install_telemetry_routes(app, service_name="document-agent")
+    app = FastAPI(
+        title="Travel Disruption Communication Agent", version="0.1.0"
+    )
+    install_telemetry_routes(app, service_name="communication-agent")
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),
@@ -164,9 +155,12 @@ def create_document_agent_app(
 
     @app.get("/health/live", tags=["health"])
     async def live() -> dict[str, str]:
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "explanation_mode": "azure" if resolved_provider else "deterministic",
+        }
 
     return app
 
 
-app = create_document_agent_app()
+app = create_communication_agent_app()

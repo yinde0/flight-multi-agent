@@ -148,7 +148,10 @@ def main() -> int:
         initial_failed_actions = metric_value(
             initial_action_metrics.text,
             "travel_operation_executions_total",
-            {"operation": "notification.action", "outcome": "failed"},
+            {
+                "operation": "agent.orchestrator.notify_traveler",
+                "outcome": "failed",
+            },
         )
 
         try:
@@ -198,7 +201,10 @@ def main() -> int:
             observed["failed_notification_operations"] = metric_value(
                 action_response.text,
                 "travel_operation_executions_total",
-                {"operation": "notification.action", "outcome": "failed"},
+                {
+                    "operation": "agent.orchestrator.notify_traveler",
+                    "outcome": "failed",
+                },
             ) - initial_failed_actions
 
             redrive_url = f"{dead_letter_url}/{decision_id}/redrive"

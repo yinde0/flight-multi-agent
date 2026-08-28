@@ -1,0 +1,79 @@
+services:
+  flight-agency-simulator:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.flight_agency_service:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8015"
+    environment:
+      FLIGHT_AGENCY_CONTROL_TOKEN: ${FLIGHT_AGENCY_DEMO_TOKEN:-local-flight-agency-demo}
+    ports:
+      - "127.0.0.1:${FLIGHT_AGENCY_DEMO_PORT:-18015}:8015"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8015/health/live', timeout=2)"
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+    networks:
+      - travel-internal
+      - travel-edge
+
+  flight-status-mcp:
+    environment:
+      FLIGHT_STATUS_PROVIDER: agency
+      FLIGHT_AGENCY_BASE_URL: http://flight-agency-simulator:8015
+      FLIGHT_AGENCY_CONTROL_TOKEN: ${FLIGHT_AGENCY_DEMO_TOKEN:-local-flight-agency-demo}
+      FLIGHT_AGENCY_TIMEOUT_SECONDS: "15"
+      NO_PROXY: flight-agency-simulator,localhost,127.0.0.1
+    depends_on:
+      flight-agency-simulator:
+        condition: service_healthy
+
+  weather-mcp:
+    environment:
+      WEATHER_PROVIDER: replay
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_07_weather_timeline.json
+
+  flight-search-mcp:
+    environment:
+      FLIGHT_SEARCH_PROVIDER: replay
+      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_07_options.json
+
+  notification-mcp:
+    # Real SMS requires the explicit DEMO_NOTIFICATION_PROVIDER=twilio opt-in.
+    environment:
+      NOTIFICATION_PROVIDER: ${DEMO_NOTIFICATION_PROVIDER:-recording}
+
+  notification-action-service:
+    environment:
+      NOTIFICATION_PROVIDER: ${DEMO_NOTIFICATION_PROVIDER:-recording}
+
+  trip-orchestrator:
+    environment:
+      SCHEDULER_BACKGROUND_ENABLED: "false"
+      SCHEDULER_CONTROL_ENABLED: "true"
+
+  travel-api:
+    environment:
+      SCHEDULER_CONTROL_ENABLED: "true"
+      FLIGHT_AGENCY_DEMO_ENABLED: "true"
+      FLIGHT_AGENCY_BASE_URL: http://flight-agency-simulator:8015
+      FLIGHT_AGENCY_CONTROL_TOKEN: ${FLIGHT_AGENCY_DEMO_TOKEN:-local-flight-agency-demo}
+      FLIGHT_AGENCY_TIMEOUT_SECONDS: "15"
+      NO_PROXY: document-agent,monitor-agent,trip-orchestrator,flight-agency-simulator,localhost,127.0.0.1
+    depends_on:
+      flight-agency-simulator:
+        condition: service_healthy
+
+  traveler-ui:
+    environment:
+      FLIGHT_AGENCY_DEMO_ENABLED: "true"

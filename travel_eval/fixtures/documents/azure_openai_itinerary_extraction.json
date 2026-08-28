@@ -1,0 +1,22 @@
+{
+  "can_parse": true,
+  "confirmation_codes": ["ZXCV12"],
+  "confirmation_evidence": ["Booking ID: ZXCV12"],
+  "legs": [
+    {
+      "marketing_carrier": "NB",
+      "operating_carrier": "NB",
+      "flight_number": "NB204",
+      "origin": "LHR",
+      "destination": "AMS",
+      "scheduled_departure_at": "2026-09-15T08:00:00+01:00",
+      "scheduled_arrival_at": "2026-09-15T10:15:00+02:00",
+      "flight_number_evidence": "Flight: NB204",
+      "route_evidence": "Journey: London Heathrow (LHR) to Amsterdam Schiphol (AMS)",
+      "departure_evidence": "Departure: 15 September 2026 at 08:00 BST",
+      "arrival_evidence": "Arrival: 15 September 2026 at 10:15 CEST",
+      "confidence": 0.98
+    }
+  ],
+  "reason_codes": []
+}

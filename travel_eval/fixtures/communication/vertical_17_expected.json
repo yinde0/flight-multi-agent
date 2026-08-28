@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "monitoring_status": "baseline_stored",
+    "category": null,
+    "verdict": null,
+    "notification_status": "not_required",
+    "notification_message": null
+  },
+  "material_delay": {
+    "monitoring_status": "candidate_evaluated",
+    "category": "DELAY",
+    "verdict": "NOTIFY",
+    "notification_status": "delivered",
+    "notification_message": "Your flight is now delayed by 45 minutes. We'll keep watching for further changes."
+  }
+}

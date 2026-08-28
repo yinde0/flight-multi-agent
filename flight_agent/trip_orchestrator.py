@@ -33,6 +33,7 @@ from flight_agent.telemetry import (
     extracted_trace_context,
     hash_reference,
     install_telemetry_routes,
+    set_current_span_content,
     trace_headers,
     trace_operation,
 )
@@ -198,18 +199,22 @@ class TripOrchestrator:
 
     async def tick(self, request: SchedulerTickRequest) -> SchedulerTickOutcome:
         now = parse_timestamp(request.now)
+        claim_arguments = {
+            "now": now,
+            "maximum_legs": request.maximum_legs,
+            "lease_seconds": self._lease_seconds,
+        }
+        if request.trip_id is not None:
+            claim_arguments["trip_id"] = request.trip_id
         due = await asyncio.to_thread(
-            self._trip_store.claim_due_legs,
-            now=now,
-            maximum_legs=request.maximum_legs,
-            lease_seconds=self._lease_seconds,
+            self._trip_store.claim_due_legs, **claim_arguments
         )
         results: list[SchedulerPollResult] = []
         for leg in due:
             try:
                 with extracted_trace_context(leg.trace_headers):
                     with trace_operation(
-                        "scheduler.poll_leg",
+                        "agent.orchestrator.monitor_leg",
                         service_name="trip-orchestrator",
                         kind="chain",
                         attributes={
@@ -217,6 +222,20 @@ class TripOrchestrator:
                             "travel.leg_ref": hash_reference(leg.leg_id),
                         },
                     ):
+                        set_current_span_content(
+                            input_value={
+                                "task": "Ask the Monitoring Agent to inspect one due flight leg.",
+                                "correlation": {
+                                    "trip_ref": hash_reference(leg.trip_id),
+                                    "leg_ref": hash_reference(leg.leg_id),
+                                },
+                                "flight": {
+                                    "flight_iata": leg.flight_iata,
+                                    "flight_date": leg.flight_date,
+                                },
+                                "replay_requested": leg.replay_key is not None,
+                            }
+                        )
                         outcome = await self._monitoring_agent.poll(
                             MonitoringPollRequest(
                                 trip_id=leg.trip_id,
@@ -225,6 +244,28 @@ class TripOrchestrator:
                                 flight_date=leg.flight_date,
                                 replay_key=leg.replay_key,
                             )
+                        )
+                        set_current_span_content(
+                            output_value={
+                                "monitoring_status": outcome.status,
+                                "candidate": {
+                                    "category": (
+                                        outcome.candidate or {}
+                                    ).get("category"),
+                                    "delay_minutes": (
+                                        outcome.candidate or {}
+                                    ).get("delay_minutes"),
+                                },
+                                "decision": {
+                                    "verdict": (
+                                        outcome.decision or {}
+                                    ).get("verdict"),
+                                    "reason_codes": (
+                                        outcome.decision or {}
+                                    ).get("reason_codes", []),
+                                },
+                                "error_code": outcome.error_code,
+                            }
                         )
                 await asyncio.to_thread(
                     self._trip_store.complete_poll,
@@ -262,6 +303,12 @@ class TripOrchestrator:
                         notification_id=(
                             str(outcome.notification.get("notification_id"))
                             if outcome.notification
+                            else None
+                        ),
+                        notification_message=(
+                            str(outcome.notification.get("friendly_message"))
+                            if outcome.notification
+                            and outcome.notification.get("friendly_message")
                             else None
                         ),
                         search_id=(

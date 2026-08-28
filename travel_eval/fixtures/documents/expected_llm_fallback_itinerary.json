@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "trip-fixture-llm-fallback",
+  "traveler_ref": "traveler-synthetic-001",
+  "confirmation_codes": ["ZXCV12"],
+  "legs": [
+    {
+      "leg_id": "leg-fixture-llm-fallback-1",
+      "marketing_carrier": "NB",
+      "operating_carrier": "NB",
+      "flight_number": "NB204",
+      "origin": "LHR",
+      "destination": "AMS",
+      "scheduled_departure_at": "2026-09-15T07:00:00Z",
+      "scheduled_arrival_at": "2026-09-15T08:15:00Z"
+    }
+  ]
+}

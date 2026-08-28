@@ -13,24 +13,25 @@ change a disruption candidate, or authorize a traveler action.
 ## Architecture
 
 ```text
-Travel API HTTP request (creates trace)
+agent.orchestrator.trip_pipeline (public activation creates the trace)
   -> Trip Orchestrator A2A
-     -> Document Agent A2A / document.parse
+     -> agent.document.parse_itinerary
      -> Postgres trip + W3C trace context
 
 Later virtual-clock tick
-  -> scheduler.poll_leg (restores the trip trace context)
-     -> Monitoring Agent A2A / monitoring.poll
+  -> agent.orchestrator.monitor_leg (restores the trip trace context)
+     -> agent.monitor.detect_disruption
         -> Flight-status MCP
         -> Weather MCP
         -> DynamoDB candidate + outbox + trace context
         -> JetStream publish / Eval consume
-           -> deterministic evaluation.decide
-           -> optional evaluation.crewai_advisory
+           -> agent.eval.apply_policy
+           -> optional agent.eval.review_with_crewai
+           -> agent.communication.explain_disruption
            -> DynamoDB decision + outbox + trace context
            -> JetStream publish / action consumes
-              -> Notification MCP
-              -> Read-only flight-search MCP
+              -> agent.orchestrator.notify_traveler -> Notification MCP
+              -> agent.orchestrator.search_rebooking -> Flight-search MCP
 ```
 
 ## Context propagation
@@ -59,6 +60,11 @@ attributes—not PDF text, confirmation codes, provider payloads, prompts, model
 completions, traveler content, or secrets. Tracing is optional and business work
 continues if the collector is unavailable.
 
+The LangSmith overlay uses `OTEL_HTTP_TRACE_MODE=agent_roots` on the public API
+and `off` on internal services. Context propagation remains active, but generic
+HTTP POST runs are omitted. LangSmith therefore presents agent decisions as the
+main tree and retains MCP and messaging spans only as supporting children.
+
 Prompt input/output capture requires both the development overlay and a
 development deployment environment. The end-to-end runner uses only checked-in
 synthetic evidence and never prints traced content to the terminal.
@@ -78,10 +84,11 @@ project. It first attempts direct lookup with the returned W3C ID. If LangSmith'
 OTLP ingestion assigns a different stored trace UUID, it requires exactly one
 current-window trace containing activation, scheduler, monitoring, Eval,
 notification, and search anchors, then fetches that complete trace. Ambiguous or
-split groups fail. The complete trace must contain every HTTP, document,
+split groups fail. The complete trace must contain every document,
 scheduler, monitoring, MCP, messaging, deterministic Eval, CrewAI advisory,
-notification, and search span. The runner also requires tick claim counts
-`[1, 0, 1, 0]`, exactly one notification, exactly one search, and visible
+notification, and search agent span. Every `agent.*` span must have a non-empty,
+redacted input and output. The runner also requires tick claim counts `[1, 0,
+1, 0]`, exactly one notification, exactly one search, and visible
 development-only Eval input and output fields.
 
 Restore the ordinary privacy-safe stack afterward:

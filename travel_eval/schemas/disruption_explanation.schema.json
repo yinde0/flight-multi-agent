@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/travel-eval/disruption_explanation.schema.json",
+  "title": "Validated Friendly Disruption Explanation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "prompt_version", "message", "status", "source"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "prompt_version": {"const": "disruption-explanation-v1"},
+    "message": {"type": "string", "minLength": 15, "maxLength": 300},
+    "status": {"enum": ["generated", "fallback"]},
+    "source": {"enum": ["azure_openai", "deterministic"]},
+    "model": {"type": ["string", "null"]},
+    "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "error_code": {
+      "type": ["string", "null"],
+      "enum": [
+        "EXPLANATION_LLM_NOT_CONFIGURED", "EXPLANATION_LLM_FAILED",
+        "EXPLANATION_LLM_UNSAFE", "EXPLANATION_AGENT_UNAVAILABLE", null
+      ]
+    }
+  }
+}

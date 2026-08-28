@@ -89,7 +89,12 @@ class TripStore(Protocol):
     ) -> None: ...
 
     def claim_due_legs(
-        self, *, now: datetime, maximum_legs: int, lease_seconds: int
+        self,
+        *,
+        now: datetime,
+        maximum_legs: int,
+        lease_seconds: int,
+        trip_id: str | None = None,
     ) -> list[ScheduledLeg]: ...
 
     def complete_poll(
@@ -422,18 +427,30 @@ class PostgresTripStore:
             )
 
     def claim_due_legs(
-        self, *, now: datetime, maximum_legs: int, lease_seconds: int
+        self,
+        *,
+        now: datetime,
+        maximum_legs: int,
+        lease_seconds: int,
+        trip_id: str | None = None,
     ) -> list[ScheduledLeg]:
         lease_until = now + timedelta(seconds=lease_seconds)
+        trip_filter = ""
+        parameters: list[Any] = [now, now]
+        if trip_id is not None:
+            trip_filter = "AND trip_id = %s"
+            parameters.append(trip_id)
+        parameters.extend([maximum_legs, lease_until])
         with self._connect() as connection:
             rows = connection.execute(
-                """
+                f"""
                 WITH due AS (
                     SELECT trip_id, leg_id
                     FROM trip_legs
                     WHERE monitoring_status = 'active'
                       AND next_poll_at <= %s
                       AND (lease_until IS NULL OR lease_until <= %s)
+                      {trip_filter}
                     ORDER BY next_poll_at, trip_id, leg_id
                     FOR UPDATE SKIP LOCKED
                     LIMIT %s
@@ -444,7 +461,7 @@ class PostgresTripStore:
                 WHERE leg.trip_id = due.trip_id AND leg.leg_id = due.leg_id
                 RETURNING leg.*
                 """,
-                (now, now, maximum_legs, lease_until),
+                tuple(parameters),
             ).fetchall()
             trip_ids = sorted({str(row["trip_id"]) for row in rows})
             contexts: dict[str, dict[str, str]] = {}

@@ -15,29 +15,34 @@ from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SPANS = {
-    "http.server",
-    "document.parse",
-    "scheduler.poll_leg",
-    "monitoring.poll",
+    "agent.orchestrator.trip_pipeline",
+    "agent.document.parse_itinerary",
+    "agent.orchestrator.monitor_leg",
+    "agent.monitor.detect_disruption",
     "mcp.get_flight_status",
     "mcp.get_airport_weather",
     "messaging.publish",
     "messaging.consume.disruption_candidate",
-    "evaluation.decide",
-    "evaluation.crewai_advisory",
+    "agent.eval.apply_policy",
+    "agent.eval.review_with_crewai",
     "messaging.consume.disruption_confirmed",
-    "notification.action",
+    "agent.orchestrator.notify_traveler",
+    "agent.communication.explain_disruption",
     "mcp.send_notification",
-    "search.action",
+    "agent.orchestrator.search_rebooking",
     "mcp.search_flights",
 }
+AGENT_SPANS = {
+    name for name in EXPECTED_SPANS if name.startswith("agent.")
+}
 TRACE_ANCHORS = {
-    "document.parse",
-    "scheduler.poll_leg",
-    "monitoring.poll",
-    "evaluation.decide",
-    "notification.action",
-    "search.action",
+    "agent.document.parse_itinerary",
+    "agent.orchestrator.monitor_leg",
+    "agent.monitor.detect_disruption",
+    "agent.eval.apply_policy",
+    "agent.orchestrator.notify_traveler",
+    "agent.communication.explain_disruption",
+    "agent.orchestrator.search_rebooking",
 }
 TRACE_SELECT = [
     "id",
@@ -170,7 +175,7 @@ def main() -> int:
             ]
 
         if not matching_runs:
-            diagnostic_names = EXPECTED_SPANS - {"http.server"}
+            diagnostic_names = EXPECTED_SPANS
             name_filter = "or(" + ",".join(
                 f'eq(name, "{name}")' for name in sorted(diagnostic_names)
             ) + ")"
@@ -237,11 +242,31 @@ def main() -> int:
     advisory_runs = [
         run
         for run in matching_runs
-        if run.get("name") == "evaluation.crewai_advisory"
+        if run.get("name") == "agent.eval.review_with_crewai"
     ]
     advisory_content_visible = any(
         bool(run.get("inputs")) and bool(run.get("outputs"))
         for run in advisory_runs
+    )
+    agent_runs = [
+        run for run in matching_runs if run.get("name") in AGENT_SPANS
+    ]
+    agent_io_visible = {
+        str(run.get("name")): bool(run.get("inputs")) and bool(run.get("outputs"))
+        for run in agent_runs
+    }
+    all_agent_io_visible = AGENT_SPANS <= {
+        name for name, visible in agent_io_visible.items() if visible
+    }
+    transport_runs = sorted(
+        {
+            str(run.get("name"))
+            for run in matching_runs
+            if str(run.get("name")) == "http.server"
+            or str(run.get("name")).startswith(
+                ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ")
+            )
+        }
     )
     one_consequence = len(consequences) == 1
     action_complete = bool(
@@ -265,6 +290,8 @@ def main() -> int:
             trace_id
             and not missing
             and advisory_content_visible
+            and all_agent_io_visible
+            and not transport_runs
             and action_complete
             and duplicate_ticks_suppressed
         ),
@@ -276,6 +303,9 @@ def main() -> int:
         "spans_verified": sorted(EXPECTED_SPANS & names),
         "missing_spans": missing,
         "eval_prompt_input_output_visible": advisory_content_visible,
+        "agent_input_output_visible": agent_io_visible,
+        "all_agent_input_output_visible": all_agent_io_visible,
+        "generic_http_transport_runs": transport_runs,
         "duplicate_ticks_suppressed": duplicate_ticks_suppressed,
         "notification_count": int(bool(one_consequence and consequences[0].get("notification_id"))),
         "search_count": int(bool(one_consequence and consequences[0].get("search_id"))),

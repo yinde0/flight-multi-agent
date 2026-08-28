@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0.0",
+  "prompt_version": "disruption-explanation-v1",
+  "message": "Your flight is now delayed by 45 minutes. We'll keep watching for further changes.",
+  "facts_used": ["category", "delay_minutes"],
+  "confidence": 0.98
+}

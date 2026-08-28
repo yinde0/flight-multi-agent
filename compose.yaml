@@ -352,9 +352,11 @@ services:
       MONITORING_TABLE_NAME: travel-monitoring-state
       NATS_URL: nats://nats:4222
       NOTIFICATION_MCP_URL: http://notification-mcp:8007/mcp
+      COMMUNICATION_AGENT_URL: http://communication-agent:8017
+      COMMUNICATION_AGENT_TIMEOUT_SECONDS: ${COMMUNICATION_AGENT_TIMEOUT_SECONDS:-35}
       NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
       TRIP_ORCHESTRATOR_URL: http://trip-orchestrator:8011
-      NO_PROXY: notification-mcp,trip-orchestrator,dynamodb-local,nats,localhost,127.0.0.1
+      NO_PROXY: notification-mcp,communication-agent,trip-orchestrator,dynamodb-local,nats,localhost,127.0.0.1
     depends_on:
       dynamodb-local:
         condition: service_started
@@ -363,6 +365,8 @@ services:
       nats:
         condition: service_healthy
       notification-mcp:
+        condition: service_healthy
+      communication-agent:
         condition: service_healthy
     expose:
       - "8008"
@@ -379,6 +383,41 @@ services:
     networks:
       - travel-internal
       - notification-internal
+
+  communication-agent:
+    build:
+      context: .
+    command:
+      - uvicorn
+      - flight_agent.communication_a2a:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8017"
+    environment:
+      COMMUNICATION_AGENT_PUBLIC_URL: http://communication-agent:8017
+      DISRUPTION_EXPLANATION_MODE: ${DISRUPTION_EXPLANATION_MODE:-auto}
+      DISRUPTION_EXPLANATION_TIMEOUT_SECONDS: ${DISRUPTION_EXPLANATION_TIMEOUT_SECONDS:-30}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-${AZURE_ENDPOINT:-}}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-${AZURE_API_KEY:-}}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-${CHAT_DEPLOYMENT:-}}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-${CHAT_API_VERSION:-2024-10-21}}
+      NO_PROXY: communication-agent,localhost,127.0.0.1
+    expose:
+      - "8017"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8017/health/live', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - travel-internal
+      - communication-egress
 
   flight-search-mcp:
     build:
@@ -527,6 +566,14 @@ services:
       MISTRAL_OCR_BASE_URL: ${MISTRAL_OCR_BASE_URL:-https://api.mistral.ai/v1}
       MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
       MISTRAL_OCR_TIMEOUT_SECONDS: ${MISTRAL_OCR_TIMEOUT_SECONDS:-60}
+      DOCUMENT_LLM_MODE: ${DOCUMENT_LLM_MODE:-off}
+      DOCUMENT_LLM_MIN_CONFIDENCE: ${DOCUMENT_LLM_MIN_CONFIDENCE:-0.90}
+      DOCUMENT_LLM_MAX_INPUT_CHARS: ${DOCUMENT_LLM_MAX_INPUT_CHARS:-30000}
+      DOCUMENT_LLM_TIMEOUT_SECONDS: ${DOCUMENT_LLM_TIMEOUT_SECONDS:-45}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-${AZURE_ENDPOINT:-}}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-${AZURE_API_KEY:-}}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-${CHAT_DEPLOYMENT:-}}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-${CHAT_API_VERSION:-2024-10-21}}
     expose:
       - "8001"
     healthcheck:
@@ -670,6 +717,7 @@ networks:
   search-internal:
     internal: true
   search-egress:
+  communication-egress:
 
 volumes:
   dynamodb-data:

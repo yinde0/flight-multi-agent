@@ -44,6 +44,26 @@ docker compose -f compose.yaml up -d --wait --remove-orphans
 See [docs/vertical-slice-14.md](docs/vertical-slice-14.md) for the callback
 security boundary and production ingress requirements.
 
+## Manual flight agency demo
+
+The flight agency sandbox makes the complete product demonstrable without waiting
+for a real airline disruption. In an isolated Docker overlay, the Streamlit app can
+manually change a synthetic flight's gate, delay, status, cancellation, or
+diversion and then run that revision through the real Monitoring Agent, MCP,
+DynamoDB diff, NATS, Eval Agent, notification, and read-only search path.
+
+```powershell
+docker compose -f compose.yaml -f compose.agency-demo.yaml up -d --build --wait --remove-orphans
+# Open http://localhost:8501 and upload output/pdf/synthetic_direct_eticket.pdf
+.\.venv\Scripts\python.exe tools\run_vertical_agency_demo.py
+```
+
+The overlay defaults to a recording notifier and cannot send an SMS unless
+`DEMO_NOTIFICATION_PROVIDER=twilio` is explicitly set. Restore the normal live
+provider stack with `docker compose -f compose.yaml up -d --wait --remove-orphans`.
+See [docs/vertical-slice-15.md](docs/vertical-slice-15.md) for the operator journey,
+expected decisions, and safety boundaries.
+
 The package defines the contracts those components must satisfy and keeps
 deterministic scenario replay as the acceptance boundary for every application
 vertical slice.
@@ -83,6 +103,27 @@ The test overlay runs a private Mistral-compatible contract stub, so the golden 
 does not need an API key, spend credits, or send fixture documents outside Docker.
 For a real Mistral call, copy `.env.example` to `.env`, set `MISTRAL_API_KEY`, and use
 `docker compose up --build -d --wait` without the test overlay.
+
+### Azure OpenAI document fallback
+
+The highest-impact LLM path is an evidence-checked fallback for unfamiliar ticket
+layouts. The CrewAI Document Flow first runs the deterministic parser. Only a
+`review_required` result may call Azure OpenAI, and its structured response must
+quote ticket evidence, meet the confidence threshold, and pass canonical schema
+and timestamp validation. Any failure still requests human review.
+
+Run the complete OCR -> deterministic abstention -> Azure-compatible fallback
+with local contract stubs and zero external model calls:
+
+```powershell
+docker compose -f compose.yaml -f compose.test.yaml -f compose.document-llm-test.yaml up -d --build --wait --remove-orphans
+.\.venv\Scripts\python.exe tools\run_vertical_document_llm_test.py
+docker compose -f compose.yaml up -d --wait --remove-orphans
+```
+
+Real use requires `DOCUMENT_LLM_MODE=fallback`, the Azure endpoint and API key,
+and `AZURE_OPENAI_DEPLOYMENT`. See
+[docs/vertical-slice-16.md](docs/vertical-slice-16.md).
 
 ## Stateful monitoring vertical slice
 
@@ -139,6 +180,29 @@ docker compose -f compose.yaml -f compose.test.yaml -f compose.notification-test
 The golden requires exactly one recorded delivery for the approved delay and no
 delivery for every suppressed or unchanged poll. See
 [docs/vertical-slice-05.md](docs/vertical-slice-05.md).
+
+### Friendly post-Eval explanations
+
+An A2A Communication Agent now turns only Eval-approved, PII-free disruption
+facts into calm traveler language. Azure OpenAI writes the explanation but has
+no authority or tools: it cannot notify, search, rebook, cancel, or pay. Local
+validation rejects invented numbers and claims about rebooking, refunds,
+compensation, guarantees, or URLs; any model or agent failure immediately uses
+the deterministic message and does not block the authorized notification.
+
+Run the complete flight-agency -> Eval -> Communication Agent -> Notification
+vertical with a local Azure-compatible stub:
+
+```powershell
+docker compose -f compose.yaml -f compose.agency-demo.yaml -f compose.communication-test.yaml up -d --build --wait --remove-orphans
+.\.venv\Scripts\python.exe tools\run_vertical_communication_test.py
+```
+
+The traveler UI displays the friendly message, and development LangSmith traces
+show `agent.communication.explain_disruption` with its safe input and output.
+Real Azure generation activates automatically when the endpoint, key, and either
+`AZURE_OPENAI_DEPLOYMENT` or `CHAT_DEPLOYMENT` are present. See
+[docs/vertical-slice-17.md](docs/vertical-slice-17.md).
 
 ## Read-only rebooking-search vertical slice
 
@@ -276,8 +340,8 @@ docker compose -f compose.yaml -f compose.langsmith.yaml -f compose.langsmith-de
 docker compose -f compose.yaml up -d --wait --remove-orphans
 ```
 
-The runner requires all HTTP, document, scheduler, monitoring, MCP, event,
-evaluation, notification, and search spans in one trace. It also proves duplicate
+The runner requires all agent, MCP, and event spans in one trace, verifies every
+agent input/output, and rejects generic HTTP transport runs. It also proves duplicate
 ticks create no second notification or search. See
 [docs/vertical-slice-10.md](docs/vertical-slice-10.md).
 
@@ -312,6 +376,10 @@ enables shadow mode and requires `MISTRAL_API_KEY`. See
 - End-to-end W3C trace correlation across delayed and durable work.
 - A versioned, schema-constrained CrewAI/Mistral Eval advisory with golden
   agreement metrics and no action authority.
+- An optional Azure OpenAI itinerary-extraction fallback with quoted evidence,
+  deterministic validation, and fail-closed human review.
+- A PII-isolated A2A Communication Agent that uses Azure OpenAI only for
+  friendly post-Eval wording and fails over to deterministic messages.
 
 ## Run the evaluation
 
@@ -369,6 +437,8 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 The flight-status, weather, notification, and read-only flight-search MCP tools,
 durable JetStream event path, transactional DynamoDB outboxes and live-state
 adapter, Monitoring Agent, Eval Agent, and post-Eval action services now exist.
+The Communication Agent has isolated model egress but no recipient, persistence,
+notification, search, or booking capability.
 Trip activation uses an RDS-compatible
 Postgres adapter and an S3-compatible document adapter; Docker supplies local
 Postgres and MinIO instances. The capability MCPs are reachable only from their

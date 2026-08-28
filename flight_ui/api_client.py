@@ -84,6 +84,37 @@ class TravelApiClient:
     def document_status(self, trip_id: str) -> dict[str, Any]:
         return self._request_json("GET", f"/v1/trips/{trip_id}/document-status")
 
+    def agency_demo_status(self) -> dict[str, Any]:
+        return self._request_json("GET", "/v1/demo/agency/status")
+
+    def sync_agency_trip(self, trip_id: str) -> dict[str, Any]:
+        return self._request_json("POST", f"/v1/demo/agency/trips/{trip_id}/sync")
+
+    def change_agency_flight(
+        self,
+        flight_iata: str,
+        flight_date: str,
+        change: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        return self._request_json(
+            "PATCH",
+            f"/v1/demo/agency/flights/{flight_iata}/{flight_date}",
+            json=dict(change),
+        )
+
+    def reset_agency_flight(
+        self, flight_iata: str, flight_date: str
+    ) -> dict[str, Any]:
+        return self._request_json(
+            "POST",
+            f"/v1/demo/agency/flights/{flight_iata}/{flight_date}/reset",
+        )
+
+    def run_agency_demo_check(self, trip_id: str) -> dict[str, Any]:
+        return self._request_json(
+            "POST", f"/v1/demo/agency/trips/{trip_id}/check"
+        )
+
     def _request_json(
         self,
         method: str,

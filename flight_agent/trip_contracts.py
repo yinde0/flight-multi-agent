@@ -132,6 +132,7 @@ class SchedulerTickRequest(BaseModel):
 
     now: str
     maximum_legs: int = Field(default=20, ge=1, le=100)
+    trip_id: str | None = Field(default=None, pattern=r"^trip-[a-z0-9-]+$")
 
 
 class SchedulerPollResult(BaseModel):
@@ -147,6 +148,7 @@ class SchedulerPollResult(BaseModel):
     notification_status: str | None = None
     search_status: str | None = None
     notification_id: str | None = None
+    notification_message: str | None = Field(default=None, max_length=300)
     search_id: str | None = None
     error_code: str | None = None
 
