@@ -13,6 +13,7 @@ from flight_ui.presentation import (
     make_upload_identity,
     mask_confirmation,
     normalize_phone_number,
+    notification_feedback,
     next_poll_at,
     safe_pdf_filename,
     trip_status,
@@ -21,6 +22,62 @@ from flight_ui.presentation import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("status,severity", [
+    ("failed", "error"), ("rejected", "error"), ("accepted", "warning"),
+    ("delivered", "success"), ("pending", "info"), ("duplicate", "info"),
+])
+def test_notification_feedback_does_not_confuse_approval_with_delivery(status, severity):
+    level, message = notification_feedback({"notification_status": status})
+    assert level == severity
+    if status == "accepted":
+        assert "has not been confirmed" in message
+
+
+def test_trial_failure_explains_upgrade_instead_of_showing_success():
+    level, message = notification_feedback({
+        "notification_status": "failed", "notification_error_code": "TWILIO_HTTP_400",
+        "notification_remediation": "upgrade_or_use_trial_template",
+    })
+    assert level == "error"
+    assert "TWILIO_HTTP_400" in message
+    assert "Upgrade" in message
+
+
+def test_streamlit_demo_renders_failed_sms_as_error(monkeypatch):
+    streamlit = pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+    import flight_ui.api_client as api_client_module
+
+    class FakeClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def health(self):
+            return True
+
+    monkeypatch.setattr(api_client_module, "TravelApiClient", FakeClient)
+    monkeypatch.setenv("FLIGHT_AGENCY_DEMO_ENABLED", "true")
+    streamlit.cache_resource.clear()
+    app = AppTest.from_file(ROOT / "streamlit_app.py", default_timeout=8)
+    app.session_state["active_trip"] = activation_payload()
+    app.session_state["active_trip_id"] = "trip-ui-golden"
+    app.session_state["agency_demo_trip_id"] = "trip-ui-golden"
+    app.session_state["agency_demo_flights"] = [{
+        "flight_iata": "SB410", "origin": "MAN", "destination": "FRA",
+        "flight_date": "2026-09-20", "status": "scheduled",
+    }]
+    app.session_state["agency_demo_last_check"] = {"results": [{
+        "monitoring_status": "candidate_evaluated", "category": "DELAY", "verdict": "NOTIFY",
+        "notification_status": "failed", "notification_error_code": "TWILIO_HTTP_400",
+        "notification_remediation": "upgrade_or_use_trial_template",
+        "notification_message": "Your flight is delayed by 45 minutes.",
+    }]}
+    app.run()
+    assert not app.exception
+    assert any("TWILIO_HTTP_400" in error.value and "Upgrade" in error.value for error in app.error)
+    assert any("not proof of SMS delivery" in caption.value for caption in app.caption)
 
 
 def activation_payload() -> dict[str, Any]:

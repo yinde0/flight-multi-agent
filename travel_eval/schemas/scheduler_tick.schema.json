@@ -29,8 +29,11 @@
           "category": {"type": ["string", "null"]},
           "verdict": {"type": ["string", "null"]},
           "notification_status": {"type": ["string", "null"]},
+          "notification_error_code": {"type": ["string", "null"]},
+          "notification_remediation": {"type": ["string", "null"]},
           "search_status": {"type": ["string", "null"]},
           "notification_id": {"type": ["string", "null"]},
+          "notification_message": {"type": ["string", "null"], "maxLength": 300},
           "search_id": {"type": ["string", "null"]},
           "error_code": {"type": ["string", "null"]}
         }

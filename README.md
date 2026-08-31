@@ -44,6 +44,10 @@ docker compose -f compose.yaml up -d --wait --remove-orphans
 See [docs/vertical-slice-14.md](docs/vertical-slice-14.md) for the callback
 security boundary and production ingress requirements.
 
+For missing SMS, safe provider error codes, retry behavior, and Twilio's trial
+restrictions, see [SMS delivery troubleshooting](docs/sms-delivery-troubleshooting.md).
+An approved alert or prepared message is not proof of delivery.
+
 ## Manual flight agency demo
 
 The flight agency sandbox makes the complete product demonstrable without waiting

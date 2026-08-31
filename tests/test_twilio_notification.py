@@ -7,6 +7,7 @@ import pytest
 
 from flight_agent.notification import TwilioNotificationProvider, render_sms_body
 from flight_agent.notification_contracts import EvalApproval, NotificationCommand
+from flight_agent.notification_errors import NotificationSubmissionError
 
 
 ACCOUNT_SID = "AC" + "a" * 32
@@ -143,3 +144,121 @@ def test_twilio_provider_can_use_explicit_trial_body_without_changing_default() 
 
     form = parse_qs(captured[0].content.decode("utf-8"))
     assert form["Body"] == ["sms_appointment_reminders"]
+
+
+@pytest.mark.parametrize("http_status,code,retryable,remediation", [
+    (400, 21608, False, "verify_recipient"),
+    (401, 20003, False, "check_credentials"),
+    (400, 21606, False, "check_sender"),
+    (429, 20429, True, "retry_later"),
+    (503, 20503, True, "retry_later"),
+])
+def test_twilio_preserves_safe_codes_and_retry_classification(http_status, code, retryable, remediation):
+    def handler(request):
+        return httpx.Response(http_status, request=request, json={
+            "code": code, "message": "private provider detail +447700900123 api_key=SECRET",
+            "more_info": "https://private.example/SECRET",
+        })
+    provider = TwilioNotificationProvider(
+        account_sid=ACCOUNT_SID, username=API_KEY, password="test-api-secret",
+        from_number="+447700900100", client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(NotificationSubmissionError) as caught:
+        provider.send(sms_command())
+    failure = caught.value.failure
+    assert failure.error_code == f"TWILIO_{code}"
+    assert failure.retryable is retryable
+    assert failure.remediation == remediation
+    assert "SECRET" not in failure.model_dump_json()
+    assert "+447700" not in str(caught.value)
+    assert provider.audit()["unique_delivery_count"] == 0
+
+
+def test_trial_body_rejection_has_actionable_safe_guidance():
+    from flight_agent.notification_errors import rejected_submission
+
+    failure = rejected_submission(http_status=400, payload={
+        "code": "not-a-number-SECRET",
+        "message": "Trial account cannot send custom message body to +447700900123",
+    })
+    assert failure.error_code == "TWILIO_HTTP_400"
+    assert failure.retryable is False
+    assert failure.remediation == "upgrade_or_use_trial_template"
+    assert "SECRET" not in failure.model_dump_json()
+    assert "+447700" not in failure.model_dump_json()
+
+
+def test_uncertain_post_timeout_is_not_automatically_retried():
+    def handler(request):
+        raise httpx.ReadTimeout("private network detail", request=request)
+    provider = TwilioNotificationProvider(
+        account_sid=ACCOUNT_SID, username=API_KEY, password="test-api-secret",
+        from_number="+447700900100", client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(NotificationSubmissionError) as caught:
+        provider.send(sms_command())
+    assert caught.value.failure.error_code == "TWILIO_SUBMISSION_UNCERTAIN"
+    assert caught.value.failure.retryable is False
+    assert caught.value.failure.remediation == "check_delivery_before_retry"
+
+
+def test_failure_contract_survives_real_fastmcp_output_and_client(monkeypatch):
+    import asyncio
+    from flight_agent import notification_mcp
+    from flight_agent.notification_contracts import NotificationSubmissionFailure
+    from flight_agent.notification_mcp_client import StreamableHttpNotificationMcpClient
+
+    failure = NotificationSubmissionFailure(error_code="TWILIO_HTTP_400", retryable=False,
+        http_status=400, remediation="upgrade_or_use_trial_template")
+
+    class FailingProvider:
+        def send(self, command):
+            raise NotificationSubmissionError(failure)
+
+    monkeypatch.setattr(notification_mcp, "provider", FailingProvider())
+    monkeypatch.setattr(notification_mcp.failure_gate, "enabled", lambda: False)
+    _content, structured = asyncio.run(notification_mcp.mcp.call_tool(
+        "send_notification", {"command": sms_command().model_dump(mode="json")},
+    ))
+    client = StreamableHttpNotificationMcpClient("http://never-called/mcp")
+
+    async def call_tool(*_args):
+        return structured
+
+    monkeypatch.setattr(client, "_call_tool", call_tool)
+    with pytest.raises(NotificationSubmissionError) as caught:
+        client.send_notification(sms_command())
+    assert caught.value.failure == failure
+
+
+def test_receipt_survives_real_fastmcp_union_output_and_client(monkeypatch):
+    import asyncio
+    from flight_agent import notification_mcp
+    from flight_agent.notification import RecordingNotificationProvider
+    from flight_agent.notification_mcp_client import StreamableHttpNotificationMcpClient
+
+    monkeypatch.setattr(notification_mcp, "provider", RecordingNotificationProvider())
+    monkeypatch.setattr(notification_mcp.failure_gate, "enabled", lambda: False)
+    command = sms_command()
+    _content, structured = asyncio.run(notification_mcp.mcp.call_tool(
+        "send_notification", {"command": command.model_dump(mode="json")},
+    ))
+    client = StreamableHttpNotificationMcpClient("http://never-called/mcp")
+
+    async def call_tool(*_args):
+        return structured
+
+    monkeypatch.setattr(client, "_call_tool", call_tool)
+    receipt = client.send_notification(command)
+    assert receipt.notification_id == command.notification_id
+    assert receipt.provider == "recording"
+    assert receipt.status == "delivered"
+
+
+@pytest.mark.parametrize("code", [True, "²", -1, 1000000, {"private": "SECRET"}])
+def test_malformed_provider_code_uses_safe_http_fallback(code):
+    from flight_agent.notification_errors import rejected_submission
+
+    failure = rejected_submission(http_status=400, payload={"code": code})
+    assert failure.error_code == "TWILIO_HTTP_400"
+    assert failure.retryable is False

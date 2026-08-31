@@ -64,6 +64,99 @@ class FailingGateway:
         raise RuntimeError("simulated MCP outage")
 
 
+def test_provider_rejection_is_persisted_with_actionable_safe_details():
+    from flight_agent.notification_contracts import NotificationSubmissionFailure
+    from flight_agent.notification_errors import NotificationSubmissionError
+
+    class RejectedGateway:
+        def send_notification(self, command):
+            raise NotificationSubmissionError(NotificationSubmissionFailure(
+                error_code="TWILIO_HTTP_400", retryable=False, http_status=400,
+                remediation="upgrade_or_use_trial_template",
+            ))
+
+    store = authorized_store()
+    record = process_confirmed_event(
+        confirmed_event(), store=store, notifier=RejectedGateway(),
+        communicator=StaticCommunicationAgent(), authority_timeout_seconds=0,
+    )
+    assert record.status == "failed"
+    assert record.provider == "twilio"
+    assert record.error_code == "TWILIO_HTTP_400"
+    assert record.submission_failure.retryable is False
+    assert store.get_notification(record.decision_id)["submission_failure"]["remediation"] == "upgrade_or_use_trial_template"
+
+
+@pytest.mark.parametrize("retryable", [False, True])
+def test_notification_consumer_quarantines_permanent_rejections_on_first_attempt(monkeypatch, retryable):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    from flight_agent import notification_action_service as service
+    from flight_agent.event_delivery import DurableEventEnvelope
+    from flight_agent.notification_contracts import NotificationSubmissionFailure
+    from flight_agent.notification_errors import NotificationSubmissionError
+
+    class RejectedGateway:
+        def send_notification(self, command):
+            raise NotificationSubmissionError(NotificationSubmissionFailure(
+                error_code="TWILIO_HTTP_429" if retryable else "TWILIO_HTTP_400",
+                retryable=retryable,
+                remediation="retry_later" if retryable else "upgrade_or_use_trial_template",
+            ))
+
+    async def no_op(*_args, **_kwargs):
+        pass
+
+    callback = {}
+    async def subscribe(*_args, **kwargs):
+        callback["handle"] = kwargs["callback"]
+        return SimpleNamespace(unsubscribe=no_op)
+
+    async def connect(*_args):
+        return SimpleNamespace(jetstream=lambda: object(), drain=no_op)
+
+    monkeypatch.setattr(service, "connect_nats", connect)
+    monkeypatch.setattr(service, "ensure_event_stream", no_op)
+    monkeypatch.setattr(service, "subscribe_durable", subscribe)
+    store = authorized_store()
+    quarantined = []
+    store.put_dead_letter = lambda **record: quarantined.append(record)
+    event = confirmed_event()
+
+    class Message:
+        data = DurableEventEnvelope(
+            event_id=event["decision_id"], event_type="disruption_confirmed",
+            occurred_at=event["published_at"], payload=event,
+        ).model_dump_json().encode()
+        metadata = SimpleNamespace(num_delivered=1)
+        headers = None
+        terminated = False
+        delays = []
+
+        async def term(self):
+            self.terminated = True
+
+        async def nak(self, delay=None):
+            self.delays.append(delay)
+
+    app = service.create_notification_action_app(
+        store=store, notifier=RejectedGateway(), communicator=StaticCommunicationAgent(),
+        delivery_provider="recording",
+    )
+    message = Message()
+    with TestClient(app):
+        asyncio.run(callback["handle"](message))
+    assert message.terminated is not retryable
+    assert bool(message.delays) is retryable
+    assert bool(quarantined) is not retryable
+    if quarantined:
+        assert quarantined[0]["attempts"] == 1
+        assert quarantined[0]["error_code"] == "TWILIO_HTTP_400"
+        assert "recipient_address" not in json.dumps(quarantined)
+
+
 class StaticRecipientResolver:
     def get_recipient(self, trip_id: str) -> NotificationRecipient | None:
         return NotificationRecipient(

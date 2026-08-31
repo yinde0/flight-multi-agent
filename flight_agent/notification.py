@@ -14,7 +14,9 @@ import httpx
 from flight_agent.notification_contracts import (
     NotificationCommand,
     NotificationReceipt,
+    NotificationSubmissionFailure,
 )
+from flight_agent.notification_errors import NotificationSubmissionError, rejected_submission
 
 
 class NotificationProvider(Protocol):
@@ -196,15 +198,29 @@ class TwilioNotificationProvider:
                     data=data,
                     auth=self._auth,
                 )
-                response.raise_for_status()
+            except httpx.HTTPError:
+                # A timeout after POST does not prove Twilio rejected the SMS.
+                # Quarantine for inspection rather than risking a duplicate send.
+                raise NotificationSubmissionError(NotificationSubmissionFailure(
+                    error_code="TWILIO_SUBMISSION_UNCERTAIN", retryable=False,
+                    remediation="check_delivery_before_retry",
+                )) from None
+            try:
                 payload = response.json()
-            except (httpx.HTTPError, ValueError) as error:
-                raise RuntimeError("Twilio message submission failed") from error
+            except ValueError:
+                payload = None
+            if response.is_error:
+                raise NotificationSubmissionError(rejected_submission(
+                    http_status=response.status_code, payload=payload,
+                )) from None
             provider_id = payload.get("sid") if isinstance(payload, dict) else None
             if not isinstance(provider_id, str) or re.fullmatch(
                 r"(?:SM|MM)[0-9a-fA-F]{32}", provider_id
             ) is None:
-                raise RuntimeError("Twilio returned an invalid message identifier")
+                raise NotificationSubmissionError(NotificationSubmissionFailure(
+                    error_code="TWILIO_INVALID_RESPONSE", retryable=False,
+                    remediation="check_delivery_before_retry",
+                ))
             provider_status = str(payload.get("status") or "accepted")
             receipt = NotificationReceipt(
                 notification_id=command.notification_id,

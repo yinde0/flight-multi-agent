@@ -15,6 +15,7 @@ from flight_ui.presentation import (
     mask_confirmation,
     next_poll_at,
     normalize_phone_number,
+    notification_feedback,
     safe_pdf_filename,
     trip_status,
     validate_pdf,
@@ -310,14 +311,20 @@ def _render_agency_check(payload: dict[str, Any] | None) -> None:
             icon=":material/notifications_off:",
         )
     elif verdict in {"NOTIFY", "NOTIFY_AND_SEARCH"}:
-        notification = str(result.get("notification_status") or "pending")
         search = str(result.get("search_status") or "not required")
-        st.success(
-            f"Notification: {notification} · Rebooking search: {search}",
-            icon=":material/notification_important:",
-        )
+        severity, feedback = notification_feedback(result)
+        if severity == "error":
+            st.error(feedback, icon=":material/sms_failed:")
+        elif severity == "warning":
+            st.warning(feedback, icon=":material/pending:")
+        elif severity == "success":
+            st.success(feedback, icon=":material/notification_important:")
+        else:
+            st.info(feedback, icon=":material/notification_important:")
+        st.caption(f"Rebooking search: {search}")
         message = str(result.get("notification_message") or "").strip()
         if message:
+            st.caption("Prepared message — this preview is not proof of SMS delivery.")
             st.info(message, icon=":material/chat_bubble:")
     elif monitoring_status == "baseline_stored":
         st.success(

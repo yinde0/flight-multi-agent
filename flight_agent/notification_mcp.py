@@ -16,7 +16,9 @@ from flight_agent.notification import (
 from flight_agent.notification_contracts import (
     NotificationCommand,
     NotificationReceipt,
+    NotificationSubmissionFailure,
 )
+from flight_agent.notification_errors import NotificationSubmissionError
 from flight_agent.telemetry import install_trace_middleware
 
 
@@ -74,10 +76,13 @@ mcp = FastMCP(
     ),
     structured_output=True,
 )
-def send_notification(command: NotificationCommand) -> NotificationReceipt:
+def send_notification(command: NotificationCommand) -> NotificationReceipt | NotificationSubmissionFailure:
     if failure_gate.enabled():
         raise RuntimeError("Injected notification capability outage")
-    return provider.send(command)
+    try:
+        return provider.send(command)
+    except NotificationSubmissionError as error:
+        return error.failure
 
 
 @mcp.custom_route("/health/live", methods=["GET"])

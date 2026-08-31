@@ -146,6 +146,8 @@ class SchedulerPollResult(BaseModel):
     category: str | None = None
     verdict: str | None = None
     notification_status: str | None = None
+    notification_error_code: str | None = None
+    notification_remediation: str | None = None
     search_status: str | None = None
     notification_id: str | None = None
     notification_message: str | None = Field(default=None, max_length=300)

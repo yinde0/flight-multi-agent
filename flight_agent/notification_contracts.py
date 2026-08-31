@@ -103,6 +103,22 @@ class NotificationReceipt(BaseModel):
     provider_status: str | None = None
 
 
+class NotificationSubmissionFailure(BaseModel):
+    """Safe MCP failure result; never includes provider text, URLs, or PII."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["failed"] = "failed"
+    provider: Literal["twilio"] = "twilio"
+    error_code: str = Field(pattern=r"^TWILIO_(?:[0-9]{3,6}|HTTP_[0-9]{3}|SUBMISSION_UNCERTAIN|INVALID_RESPONSE)$")
+    retryable: bool
+    http_status: int | None = Field(default=None, ge=100, le=599)
+    remediation: Literal[
+        "upgrade_or_use_trial_template", "verify_recipient", "check_credentials",
+        "check_sender", "provider_rejected", "retry_later", "check_delivery_before_retry",
+    ] = "provider_rejected"
+
+
 class NotificationActionRecord(BaseModel):
     """Durable audit record written by the post-Eval action service."""
 
@@ -123,6 +139,7 @@ class NotificationActionRecord(BaseModel):
     recorded_at: str
     delivery_updated_at: str | None = None
     error_code: str | None = None
+    submission_failure: NotificationSubmissionFailure | None = None
     friendly_message: str | None = Field(default=None, max_length=300)
     explanation_status: Literal["generated", "fallback"] | None = None
     explanation_source: Literal["azure_openai", "deterministic"] | None = None

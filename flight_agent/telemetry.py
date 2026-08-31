@@ -356,11 +356,12 @@ def trace_operation(
                         # An error is an outcome too. Do not export raw exception
                         # messages/stack traces, which can contain provider URLs,
                         # credentials, or traveler data.
-                        _set_span_content(
-                            span,
-                            "output",
-                            {"status": "error", "error_type": type(error).__name__},
-                        )
+                        if not (span.attributes or {}).get("travel.trace.has_output"):
+                            _set_span_content(
+                                span,
+                                "output",
+                                {"status": "error", "error_type": type(error).__name__},
+                            )
                         span.set_status(Status(StatusCode.ERROR))
                     raise
     except Exception:

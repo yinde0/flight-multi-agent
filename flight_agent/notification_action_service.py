@@ -46,6 +46,7 @@ from flight_agent.notification_mcp_client import (
     NotificationGateway,
     StreamableHttpNotificationMcpClient,
 )
+from flight_agent.notification_errors import NotificationSubmissionError
 from flight_agent.telemetry import hash_reference, install_telemetry_routes, traced
 
 
@@ -119,6 +120,10 @@ def notification_agent_trace_output(
         "provider": result.provider,
         "provider_status": result.provider_status,
         "error_code": result.error_code,
+        "submission_failure": (
+            result.submission_failure.model_dump(mode="json", exclude_none=True)
+            if result.submission_failure else None
+        ),
         "explanation": {
             "status": result.explanation_status,
             "source": result.explanation_source,
@@ -318,6 +323,27 @@ def process_confirmed_event(
             explanation_prompt_version=explanation.prompt_version,
             explanation_error_code=explanation.error_code,
         )
+    except NotificationSubmissionError as error:
+        record = NotificationActionRecord(
+            notification_id=notification_id,
+            candidate_id=event.candidate_id,
+            decision_id=event.decision_id,
+            trip_id=event.trip_id,
+            leg_id=event.leg_id,
+            verdict=event.verdict,
+            status="failed",
+            idempotency_key=idempotency_key,
+            provider=error.failure.provider,
+            recorded_at=_now_utc(),
+            error_code=error.failure.error_code,
+            submission_failure=error.failure,
+            friendly_message=explanation.message,
+            explanation_status=explanation.status,
+            explanation_source=explanation.source,
+            explanation_model=explanation.model,
+            explanation_prompt_version=explanation.prompt_version,
+            explanation_error_code=explanation.error_code,
+        )
     except Exception:
         record = NotificationActionRecord(
             notification_id=notification_id,
@@ -395,7 +421,10 @@ def create_notification_action_app(
                 )
                 if record.status in {"accepted", "delivered", "duplicate"}:
                     await message.ack_sync(timeout=3)
-                elif record.status == "rejected":
+                elif record.status == "rejected" or (
+                    record.submission_failure is not None
+                    and not record.submission_failure.retryable
+                ):
                     await quarantine_message(
                         message,
                         store=resolved_store,

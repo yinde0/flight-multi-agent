@@ -386,3 +386,16 @@ def test_focused_errors_have_safe_outcomes_without_raw_exception_data(focused_tr
     assert json.loads(span.attributes["gen_ai.completion.0.content"]) == {"status": "error", "error_type": "RuntimeError"}
     assert "private-key" not in str(span.attributes)
     assert not span.events
+
+
+def test_explicit_safe_failure_output_is_not_replaced_by_generic_exception(focused_traces):
+    with pytest.raises(RuntimeError):
+        with telemetry.trace_operation("mcp.send_notification", service_name="test"):
+            telemetry.set_current_span_content(
+                input_value={"channel": "sms"},
+                output_value={"status": "failed", "error_code": "TWILIO_HTTP_400"},
+            )
+            raise RuntimeError("unexported detail")
+    span, = focused_traces.get_finished_spans()
+    assert json.loads(span.attributes["gen_ai.completion.0.content"])["error_code"] == "TWILIO_HTTP_400"
+    assert span.status.status_code == trace.StatusCode.ERROR

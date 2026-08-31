@@ -311,6 +311,10 @@ class TripOrchestrator:
                             and outcome.notification.get("friendly_message")
                             else None
                         ),
+                        notification_error_code=(outcome.notification or {}).get("error_code"),
+                        notification_remediation=(
+                            (outcome.notification or {}).get("submission_failure") or {}
+                        ).get("remediation"),
                         search_id=(
                             str(outcome.search.get("search_id"))
                             if outcome.search

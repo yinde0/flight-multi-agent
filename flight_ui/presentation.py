@@ -8,6 +8,29 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+def notification_feedback(result: dict) -> tuple[str, str]:
+    """Eval approval, provider acceptance, and delivery are different outcomes."""
+
+    status = str(result.get("notification_status") or "pending")
+    if status in {"failed", "rejected"}:
+        guidance = {
+            "upgrade_or_use_trial_template": "Twilio Trial does not allow custom SMS text. Upgrade the account or explicitly use an approved trial template for testing.",
+            "verify_recipient": "Verify the recipient in Twilio and check the account's trial restrictions.",
+            "check_credentials": "Check the Twilio account credentials and permissions.",
+            "check_sender": "Check that the sender is approved and SMS-capable for this account.",
+            "check_delivery_before_retry": "Submission could not be confirmed. Check Twilio's message log before retrying to avoid a duplicate SMS.",
+            "retry_later": "The provider is temporarily unavailable; the delivery worker will retry within its configured limit.",
+        }.get(str(result.get("notification_remediation") or ""), "Check the notification error and provider configuration before retrying.")
+        code = str(result.get("notification_error_code") or "UNKNOWN")
+        return "error", f"Notification {status} ({code}). {guidance}"
+    if status == "accepted":
+        return "warning", "SMS submitted to the provider; delivery to your phone has not been confirmed."
+    if status == "delivered":
+        return "success", "Notification delivery confirmed by the configured provider."
+    if status == "duplicate":
+        return "info", "This alert was already submitted. No duplicate message was sent."
+    return "info", "The alert is approved, but notification processing is still pending."
+
 MAX_PDF_BYTES = 5 * 1024 * 1024
 E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
 

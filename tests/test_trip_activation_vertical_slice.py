@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+import json
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -48,6 +49,47 @@ def test_poll_identity_preserves_postgres_subsecond_precision() -> None:
     assert format_timestamp(value) == "2026-08-26T21:54:45Z"
     assert format_poll_identity(value) == "2026-08-26T21:54:45.123456Z"
     assert parse_timestamp(format_poll_identity(value)) == value
+
+
+def test_scheduler_exposes_safe_sms_failure_and_matches_json_schema() -> None:
+    from jsonschema import Draft202012Validator
+
+    class RejectedSmsMonitoringGateway:
+        async def poll(self, request):
+            return MonitoringPollOutcome(
+                status="candidate_evaluated", request=request,
+                candidate={"category": "DELAY"}, decision={"verdict": "NOTIFY"},
+                notification={
+                    "notification_id": "notification-rejected",
+                    "status": "failed", "error_code": "TWILIO_HTTP_400",
+                    "friendly_message": "Your flight is delayed by 45 minutes.",
+                    "submission_failure": {
+                        "remediation": "upgrade_or_use_trial_template",
+                    },
+                },
+                orchestration={"notification_action": {"status": "failed"}},
+            )
+
+    orchestrator = TripOrchestrator(
+        document_agent=ParsingGateway(), monitoring_agent=RejectedSmsMonitoringGateway(),
+        document_store=MemoryDocumentStore(), trip_store=MemoryTripStore(),
+    )
+    content = PDF.read_bytes()
+    asyncio.run(orchestrator.activate_trip(
+        content, metadata("trip-sms-failure", content),
+        activated_at=datetime(2026, 9, 15, 6, tzinfo=timezone.utc),
+    ))
+    outcome = asyncio.run(orchestrator.tick(
+        SchedulerTickRequest(now="2026-09-15T06:00:00Z"),
+    ))
+    assert outcome.completed_count == 1
+    result = outcome.results[0]
+    assert result.notification_status == "failed"
+    assert result.notification_error_code == "TWILIO_HTTP_400"
+    assert result.notification_remediation == "upgrade_or_use_trial_template"
+    assert result.notification_message == "Your flight is delayed by 45 minutes."
+    schema = json.loads((ROOT / "travel_eval/schemas/scheduler_tick.schema.json").read_text())
+    Draft202012Validator(schema).validate(outcome.model_dump(mode="json"))
 
 
 class MemoryDocumentStore:
