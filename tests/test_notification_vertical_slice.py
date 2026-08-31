@@ -4,12 +4,17 @@ import copy
 
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qs
 
+import httpx
 import pytest
 
 from pydantic import ValidationError
 
-from flight_agent.notification import RecordingNotificationProvider
+from flight_agent.notification import (
+    RecordingNotificationProvider,
+    TwilioNotificationProvider,
+)
 from flight_agent.disruption_explanation import DisruptionExplanation
 from flight_agent.notification_action_service import process_confirmed_event
 from flight_agent.notification_contracts import (
@@ -190,6 +195,64 @@ def test_forged_event_is_rejected_before_notification_mcp() -> None:
     assert result.error_code == "EVAL_AUTHORITY_MISMATCH"
     assert gateway.calls == []
     assert store.notifications == {}
+
+
+@pytest.mark.parametrize("body_override", [None, ""])
+def test_approved_llm_wording_reaches_twilio_body_once_without_override(
+    body_override: str | None,
+) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(
+            201, request=request, json={"sid": "SM" + "d" * 32, "status": "queued"}
+        )
+
+    store = authorized_store()
+    communicator = StaticCommunicationAgent()
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        provider = TwilioNotificationProvider(
+            account_sid="AC" + "a" * 32,
+            username="SK" + "b" * 32,
+            password="synthetic-secret",
+            from_number="+447700900100",
+            sms_body_override=body_override,
+            base_url="https://twilio.test/2010-04-01",
+            client=client,
+        )
+
+        class TwilioGateway:
+            def send_notification(self, command: NotificationCommand):
+                return provider.send(command)
+
+        gateway = TwilioGateway()
+        kwargs = {
+            "store": store,
+            "notifier": gateway,
+            "communicator": communicator,
+            "recipient_resolver": StaticRecipientResolver(),
+            "delivery_provider": "twilio",
+            "authority_timeout_seconds": 0,
+        }
+        first = process_confirmed_event(confirmed_event(), **kwargs)
+        replay = process_confirmed_event(confirmed_event(), **kwargs)
+
+    assert first.status == "accepted"
+    assert first.explanation_source == "azure_openai"
+    assert replay == first
+    assert len(communicator.calls) == 1
+    assert len(captured) == 1
+    body = parse_qs(captured[0].content.decode("utf-8"))["Body"][0]
+    assert body == (
+        f"Travel Watch: {first.friendly_message} "
+        "Open the app for details. Reply STOP to opt out."
+    )
+    assert "45 minutes" in body
+    assert "sms_appointment_reminders" not in body
+    assert "checking alternative flights" not in body
+    assert "trip-v5" not in body
+    assert "+447700900123" not in body
 
 
 def test_notification_mcp_failure_is_audited_without_fake_delivery() -> None:

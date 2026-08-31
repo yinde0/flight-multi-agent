@@ -78,3 +78,22 @@ AZURE_OPENAI_DEPLOYMENT=your-actual-azure-deployment-name
 When the mode is `off`, or `auto` finds incomplete configuration, the same A2A
 agent returns deterministic friendly templates and the remainder of the
 pipeline is unchanged.
+
+## Use the generated wording in SMS
+
+Keep the old trial-template override empty:
+
+```env
+TWILIO_SMS_BODY_OVERRIDE=
+```
+
+A non-empty value such as `sms_appointment_reminders` replaces the entire
+outgoing SMS, even when Azure successfully generated an explanation. The normal
+SMS body uses the validated explanation, followed by the application-controlled
+next step, app reminder, and opt-out text. These fixed parts are intentionally
+not rewritten by the LLM.
+
+Recreate only `notification-mcp` with the same Compose overlays after changing
+this setting. Existing alerts are not resent: a new Eval-approved disruption is
+required to generate another notification. Azure failure still uses the
+fact-based fallback, and suppression and duplicate-alert rules are unchanged.
