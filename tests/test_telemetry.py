@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+import asyncio
+import json
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from flight_agent import telemetry
 from flight_agent.flight_status_mcp_client import (
@@ -220,6 +227,7 @@ def test_langsmith_agent_root_mode_hides_other_http_routes(monkeypatch) -> None:
         "agent.orchestrator.trip_pipeline"
     ]
     assert spans[0][1].name is None
+    assert not any(key.startswith("http.") for key in spans[0][1].attributes)
 
 
 def test_http_trace_off_still_propagates_inbound_context(monkeypatch) -> None:
@@ -265,3 +273,116 @@ def test_concrete_mcp_client_operations_are_traced() -> None:
     assert hasattr(
         StreamableHttpNotificationMcpClient.send_notification, "__wrapped__"
     )
+
+
+@pytest.mark.parametrize("value", [None, "", " \n ", {}, [], {"a": []}, [None, " "]])
+def test_empty_values_do_not_claim_to_have_trace_content(monkeypatch, value):
+    monkeypatch.setattr(telemetry, "_content_capture_enabled", True)
+    span = FakeSpan()
+    telemetry._set_span_content(span, "input", value)
+    telemetry._set_span_content(span, "output", value)
+    assert span.attributes == {}
+
+
+@pytest.mark.parametrize("value", [0, False, {"options": [], "count": 0}, {"status": "unchanged"}])
+def test_real_zero_and_false_results_remain_traceable(monkeypatch, value):
+    monkeypatch.setattr(telemetry, "_content_capture_enabled", True)
+    span = FakeSpan()
+    telemetry._set_span_content(span, "input", value)
+    telemetry._set_span_content(span, "output", value)
+    assert span.attributes["travel.trace.has_input"] is True
+    assert span.attributes["travel.trace.has_output"] is True
+
+
+@pytest.fixture
+def focused_traces(monkeypatch):
+    provider = TracerProvider()
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setenv("OTEL_TRACE_SCOPE", "agents_mcp")
+    monkeypatch.setattr(telemetry, "configure_telemetry", lambda _service: True)
+    monkeypatch.setattr(telemetry, "_content_capture_enabled", True)
+    monkeypatch.setattr(trace, "get_tracer", provider.get_tracer)
+    yield exporter
+    provider.shutdown()
+
+
+def test_focused_scope_skips_transport_without_inserting_hidden_parents(focused_traces):
+    from flight_agent.event_delivery import consume_event_trace, publish_durable_event
+    from types import SimpleNamespace
+
+    published = {}
+
+    class Broker:
+        async def publish(self, _subject, _payload, **kwargs):
+            published.update(kwargs)
+
+    with telemetry.trace_operation("agent.monitor.detect_disruption", service_name="monitor") as parent:
+        parent_context = parent.get_span_context()
+        headers = telemetry.trace_headers()
+        with telemetry.trace_operation("POST /mcp", service_name="monitor") as hidden:
+            assert hidden is None
+            assert telemetry.trace_headers() == headers
+        asyncio.run(publish_durable_event(Broker(), {
+            "event_id": "synthetic-event", "event_type": "disruption_candidate",
+            "occurred_at": "2026-09-15T06:00:00Z", "payload": {"delay_minutes": 45},
+            "subject": "travel.disruption_candidate.v1", "trace_headers": headers,
+        }))
+    assert published["headers"]["traceparent"] == headers["traceparent"]
+    message = SimpleNamespace(headers=published["headers"])
+    with consume_event_trace(message, service_name="eval", operation="messaging.consume.disruption_candidate"):
+        with telemetry.trace_operation("agent.eval.apply_policy", service_name="eval"):
+            with telemetry.trace_operation("mcp.search_flights", service_name="search", kind="tool"):
+                pass
+    spans = {span.name: span for span in focused_traces.get_finished_spans()}
+    assert set(spans) == {"agent.monitor.detect_disruption", "agent.eval.apply_policy", "mcp.search_flights"}
+    assert spans["agent.eval.apply_policy"].parent.span_id == parent_context.span_id
+    assert spans["mcp.search_flights"].parent.span_id == spans["agent.eval.apply_policy"].context.span_id
+    assert all(span.context.trace_id == parent_context.trace_id for span in spans.values())
+
+
+def test_focused_scope_suppresses_http_even_when_http_mode_is_all(focused_traces, monkeypatch):
+    monkeypatch.setenv("OTEL_HTTP_TRACE_MODE", "all")
+    app = FastAPI()
+    telemetry.install_trace_middleware(app, service_name="travel-api")
+
+    @app.get("/poll")
+    async def poll():
+        return {"status": "ok"}
+
+    @app.post("/v1/trips/activate")
+    async def activate():
+        telemetry.set_current_span_content(input_value={"task": "activate synthetic trip"}, output_value={"status": "active"})
+        return {"status": "active"}
+
+    client = TestClient(app)
+    assert client.get("/poll").status_code == 200
+    assert client.post("/v1/trips/activate").status_code == 200
+    spans = focused_traces.get_finished_spans()
+    assert [span.name for span in spans] == ["agent.orchestrator.trip_pipeline"]
+    assert spans[0].attributes["travel.trace.has_input"] is True
+    assert spans[0].attributes["travel.trace.has_output"] is True
+    assert not any(key.startswith("http.") for key in spans[0].attributes)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_focused_errors_have_safe_outcomes_without_raw_exception_data(focused_traces, asynchronous):
+    def fail():
+        raise RuntimeError("private-key-and-phone-must-not-be-exported")
+
+    async def async_fail():
+        fail()
+
+    operation = telemetry.traced(
+        "mcp.synthetic_error", service_name="test", kind="tool",
+        content_input=lambda: {"flight_iata": "NB204"},
+    )(async_fail if asynchronous else fail)
+    with pytest.raises(RuntimeError):
+        asyncio.run(operation()) if asynchronous else operation()
+    span, = focused_traces.get_finished_spans()
+    assert span.status.status_code == trace.StatusCode.ERROR
+    assert span.attributes["travel.trace.has_input"] is True
+    assert span.attributes["travel.trace.has_output"] is True
+    assert json.loads(span.attributes["gen_ai.completion.0.content"]) == {"status": "error", "error_type": "RuntimeError"}
+    assert "private-key" not in str(span.attributes)
+    assert not span.events

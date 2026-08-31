@@ -12,6 +12,7 @@ from mcp.types import TextContent
 
 from flight_agent.monitoring_contracts import ProviderWeatherObservation
 from flight_agent.telemetry import trace_headers, traced
+from flight_agent.mcp_trace_views import weather_input, weather_output
 
 
 class WeatherGateway(Protocol):
@@ -34,6 +35,8 @@ class StreamableHttpWeatherMcpClient:
         "mcp.get_airport_weather",
         service_name="monitor-agent",
         kind="tool",
+        content_input=weather_input,
+        content_output=weather_output,
     )
     def get_airport_weather(
         self,

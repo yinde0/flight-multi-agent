@@ -15,6 +15,7 @@ from flight_agent.notification_contracts import (
     NotificationReceipt,
 )
 from flight_agent.telemetry import trace_headers, traced
+from flight_agent.mcp_trace_views import notification_input, notification_output
 
 
 class NotificationGateway(Protocol):
@@ -31,6 +32,8 @@ class StreamableHttpNotificationMcpClient:
         "mcp.send_notification",
         service_name="notification-action-service",
         kind="tool",
+        content_input=notification_input,
+        content_output=notification_output,
     )
     def send_notification(
         self, command: NotificationCommand

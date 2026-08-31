@@ -31,6 +31,7 @@ HTTP_TRACE_EXCLUDED_PATHS = frozenset(
     }
 )
 HTTP_TRACE_MODE_ENV = "OTEL_HTTP_TRACE_MODE"
+AGENT_MCP_TRACE_PREFIXES = ("agent.", "mcp.")
 HTTP_AGENT_ROOTS = {
     (
         "travel-api",
@@ -42,6 +43,24 @@ HTTP_AGENT_ROOTS = {
 
 def _enabled(name: str) -> bool:
     return os.getenv(name, "false").strip().lower() == "true"
+
+
+def agent_mcp_trace_scope() -> bool:
+    return os.getenv("OTEL_TRACE_SCOPE", "all").strip().lower() == "agents_mcp"
+
+
+def has_trace_content(value: Any) -> bool:
+    """Reject empty containers/strings, but retain real zero/false outcomes."""
+
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, Mapping):
+        return any(has_trace_content(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(has_trace_content(item) for item in value)
+    return True
 
 
 def hash_reference(value: Any) -> str:
@@ -148,6 +167,8 @@ def _set_span_content(span: Any, direction: str, value: Any) -> None:
     if span is None or not _content_capture_enabled or value is None:
         return
     try:
+        if not has_trace_content(value):
+            return
         if direction == "input":
             span.set_attribute("gen_ai.prompt.0.role", "user")
             span.set_attribute("gen_ai.prompt.0.content", _content_text(value))
@@ -156,6 +177,9 @@ def _set_span_content(span: Any, direction: str, value: Any) -> None:
             span.set_attribute(
                 "gen_ai.completion.0.content", _content_text(value)
             )
+        # The LangSmith collector requires both markers and both content fields.
+        # A name, a role, or an empty JSON object alone is not a useful run.
+        span.set_attribute(f"travel.trace.has_{direction}", True)
         span.set_attribute(
             "langsmith.metadata.content_capture", "development_explicit"
         )
@@ -206,7 +230,7 @@ def _http_trace_operation(
     mode = os.getenv(HTTP_TRACE_MODE_ENV, "all").strip().lower()
     if mode == "off":
         return None
-    if mode == "agent_roots":
+    if mode == "agent_roots" or agent_mcp_trace_scope():
         operation = HTTP_AGENT_ROOTS.get((service_name, method.upper(), path))
         return (operation, True) if operation else None
     return ("http.server", False)
@@ -261,7 +285,10 @@ def configure_telemetry(service_name: str) -> bool:
             _export_enabled = True
             _content_capture_enabled = development_content_capture_enabled()
 
-            if _enabled("CREWAI_OTEL_ENABLED"):
+            # Manual agent spans already include the safe prompt/result views.
+            # Auto-instrumentation introduces hidden intermediate parents and
+            # duplicate internal CrewAI spans in an agent-only trace tree.
+            if _enabled("CREWAI_OTEL_ENABLED") and not agent_mcp_trace_scope():
                 os.environ.setdefault("CREWAI_DISABLE_TELEMETRY", "true")
                 os.environ.setdefault("CREWAI_DISABLE_TRACKING", "true")
                 os.environ.setdefault("CREWAI_DISABLE_VERSION_CHECK", "true")
@@ -295,12 +322,17 @@ def trace_operation(
 ) -> Iterator[Any]:
     enabled = configure_telemetry(service_name)
     span_context = None
-    if enabled:
+    focused = agent_mcp_trace_scope()
+    if enabled and (not focused or operation.startswith(AGENT_MCP_TRACE_PREFIXES)):
         try:
             from opentelemetry import trace
 
             tracer = trace.get_tracer(service_name)
-            span_context = tracer.start_as_current_span(operation)
+            span_context = tracer.start_as_current_span(
+                operation,
+                record_exception=not focused,
+                set_status_on_exception=not focused,
+            )
         except Exception:
             span_context = None
     try:
@@ -315,7 +347,22 @@ def trace_operation(
                         value, (str, bool, int, float)
                     ):
                         span.set_attribute(key, value)
-                yield span
+                try:
+                    yield span
+                except Exception as error:
+                    if focused:
+                        from opentelemetry.trace import Status, StatusCode
+
+                        # An error is an outcome too. Do not export raw exception
+                        # messages/stack traces, which can contain provider URLs,
+                        # credentials, or traveler data.
+                        _set_span_content(
+                            span,
+                            "output",
+                            {"status": "error", "error_type": type(error).__name__},
+                        )
+                        span.set_status(Status(StatusCode.ERROR))
+                    raise
     except Exception:
         _record(operation, "error")
         raise
@@ -467,6 +514,7 @@ def install_telemetry_routes(
             "trace_export_enabled": _export_enabled,
             "crewai_instrumentation_enabled": _crewai_instrumented,
             "content_capture_enabled": _content_capture_enabled,
+            "trace_scope": "agents_mcp" if agent_mcp_trace_scope() else "all",
             "content_capture_scope": (
                 "development_explicit"
                 if _content_capture_enabled
@@ -505,35 +553,28 @@ def install_trace_middleware(app: Any, *, service_name: str) -> None:
                 operation_name,
                 service_name=service_name,
                 kind="chain",
-                attributes={"http.request.method": request.method},
+                attributes={} if agent_root else {"http.request.method": request.method},
             ) as span:
                 response = await call_next(request)
                 route = request.scope.get("route")
                 route_path = getattr(route, "path", None)
-                if span is not None:
+                if span is not None and not agent_root:
                     resolved_route = str(route_path or request.url.path)
-                    if not agent_root:
-                        try:
-                            span.update_name(f"{request.method} {resolved_route}")
-                        except Exception:
-                            pass
+                    try:
+                        span.update_name(f"{request.method} {resolved_route}")
+                    except Exception:
+                        pass
                     span.set_attribute("http.response.status_code", response.status_code)
                     if route_path:
                         span.set_attribute("http.route", str(route_path))
-                    if not agent_root:
-                        _set_span_content(
-                            span,
-                            "input",
-                            {
-                                "method": request.method,
-                                "route": resolved_route,
-                            },
-                        )
-                        _set_span_content(
-                            span,
-                            "output",
-                            {"status_code": response.status_code},
-                        )
+                    _set_span_content(
+                        span,
+                        "input",
+                        {"method": request.method, "route": resolved_route},
+                    )
+                    _set_span_content(
+                        span, "output", {"status_code": response.status_code}
+                    )
                 active_trace_id = current_trace_id()
                 if active_trace_id:
                     response.headers["X-Trace-Id"] = active_trace_id

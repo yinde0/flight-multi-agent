@@ -21,11 +21,8 @@ EXPECTED_SPANS = {
     "agent.monitor.detect_disruption",
     "mcp.get_flight_status",
     "mcp.get_airport_weather",
-    "messaging.publish",
-    "messaging.consume.disruption_candidate",
     "agent.eval.apply_policy",
     "agent.eval.review_with_crewai",
-    "messaging.consume.disruption_confirmed",
     "agent.orchestrator.notify_traveler",
     "agent.communication.explain_disruption",
     "mcp.send_notification",
@@ -35,6 +32,7 @@ EXPECTED_SPANS = {
 AGENT_SPANS = {
     name for name in EXPECTED_SPANS if name.startswith("agent.")
 }
+MCP_SPANS = {name for name in EXPECTED_SPANS if name.startswith("mcp.")}
 TRACE_ANCHORS = {
     "agent.document.parse_itinerary",
     "agent.orchestrator.monitor_leg",
@@ -78,7 +76,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Replay one synthetic activation-to-action workflow and verify that "
-            "its HTTP, A2A, scheduled poll, NATS, Eval, and MCP spans share one "
+            "its agents and MCP tools share one transport-free "
             "unambiguous LangSmith trace."
         )
     )
@@ -258,14 +256,22 @@ def main() -> int:
     all_agent_io_visible = AGENT_SPANS <= {
         name for name, visible in agent_io_visible.items() if visible
     }
+    mcp_io_visible = {
+        str(run.get("name")): bool(run.get("inputs")) and bool(run.get("outputs"))
+        for run in matching_runs if run.get("name") in MCP_SPANS
+    }
+    all_mcp_io_visible = MCP_SPANS <= {
+        name for name, visible in mcp_io_visible.items() if visible
+    }
+    empty_runs = [
+        str(run.get("name")) for run in matching_runs
+        if not run.get("inputs") or not run.get("outputs")
+    ]
     transport_runs = sorted(
         {
             str(run.get("name"))
             for run in matching_runs
-            if str(run.get("name")) == "http.server"
-            or str(run.get("name")).startswith(
-                ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ")
-            )
+            if not str(run.get("name")).startswith(("agent.", "mcp."))
         }
     )
     one_consequence = len(consequences) == 1
@@ -291,6 +297,8 @@ def main() -> int:
             and not missing
             and advisory_content_visible
             and all_agent_io_visible
+            and all_mcp_io_visible
+            and not empty_runs
             and not transport_runs
             and action_complete
             and duplicate_ticks_suppressed
@@ -305,6 +313,9 @@ def main() -> int:
         "eval_prompt_input_output_visible": advisory_content_visible,
         "agent_input_output_visible": agent_io_visible,
         "all_agent_input_output_visible": all_agent_io_visible,
+        "mcp_input_output_visible": mcp_io_visible,
+        "all_mcp_input_output_visible": all_mcp_io_visible,
+        "runs_without_input_or_output": empty_runs,
         "generic_http_transport_runs": transport_runs,
         "duplicate_ticks_suppressed": duplicate_ticks_suppressed,
         "notification_count": int(bool(one_consequence and consequences[0].get("notification_id"))),

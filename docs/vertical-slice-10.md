@@ -45,7 +45,8 @@ Later virtual-clock tick
   after a process restart.
 - Candidate and confirmed-event outboxes store the carrier with the event.
   Publication retries and JetStream redelivery continue the original lineage.
-- Consumers extract the NATS headers before starting their consume span.
+- Consumers extract NATS headers before running the next agent. In focused
+  LangSmith mode the publish/consume wrappers do not create spans.
 - Baggage is deliberately not propagated. This prevents arbitrary user or
   traveler metadata from silently crossing service boundaries.
 
@@ -63,7 +64,10 @@ continues if the collector is unavailable.
 The LangSmith overlay uses `OTEL_HTTP_TRACE_MODE=agent_roots` on the public API
 and `off` on internal services. Context propagation remains active, but generic
 HTTP POST runs are omitted. LangSmith therefore presents agent decisions as the
-main tree and retains MCP and messaging spans only as supporting children.
+main tree and retains MCP tool calls as supporting children. The focused
+`OTEL_TRACE_SCOPE=agents_mcp` policy also removes messaging and automatic CrewAI
+wrappers, and the collector requires both meaningful input and output on every
+run. See [focused tracing](langsmith-tracing.md).
 
 Prompt input/output capture requires both the development overlay and a
 development deployment environment. The end-to-end runner uses only checked-in
@@ -85,9 +89,10 @@ OTLP ingestion assigns a different stored trace UUID, it requires exactly one
 current-window trace containing activation, scheduler, monitoring, Eval,
 notification, and search anchors, then fetches that complete trace. Ambiguous or
 split groups fail. The complete trace must contain every document,
-scheduler, monitoring, MCP, messaging, deterministic Eval, CrewAI advisory,
-notification, and search agent span. Every `agent.*` span must have a non-empty,
-redacted input and output. The runner also requires tick claim counts `[1, 0,
+scheduler, monitoring, MCP, deterministic Eval, CrewAI advisory,
+notification, and search agent span. Every agent and MCP span must have a non-empty,
+redacted input and output; messaging/HTTP/internal spans must be absent.
+The runner also requires tick claim counts `[1, 0,
 1, 0]`, exactly one notification, exactly one search, and visible
 development-only Eval input and output fields.
 

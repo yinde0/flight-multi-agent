@@ -186,11 +186,12 @@ custom OTLP route. Stop the optional stack with the same file list and the
 
 ### Development prompt, input, and output tracing
 
-The document flow currently makes zero LLM calls, so it has no genuine model
-prompt or completion. The development overlay instead maps the deterministic
-flow instruction and input to LangSmith `inputs`, and the canonical parse result
-to `outputs`. CrewAI content instrumentation is also enabled, so a future
-LLM-backed CrewAI Task will expose its real prompt and completion.
+Straightforward documents can complete without an LLM call. In that case the
+development overlay maps the deterministic flow instruction and input to
+LangSmith `inputs`, and the canonical parse result
+to `outputs`. Named agent views expose their safe prompt and result. In the
+focused LangSmith profile automatic CrewAI instrumentation is disabled to avoid
+duplicate internal runs; explicit agent spans continue to cover CrewAI reasoning.
 
 This capability requires both an explicit content flag and
 `DEPLOYMENT_ENVIRONMENT=development`. Production forces content capture off even

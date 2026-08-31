@@ -5,6 +5,30 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  # Only our explicitly instrumented business boundaries belong in LangSmith.
+  # Fail closed on filter errors; the application itself remains fail-open.
+  filter/agent_mcp_io:
+    error_mode: propagate
+    traces:
+      span:
+        - 'not IsMatch(name, "^(agent|mcp)[.]")'
+        - 'attributes["travel.trace.has_input"] != true'
+        - 'attributes["travel.trace.has_output"] != true'
+        - 'not IsString(attributes["gen_ai.prompt.0.content"])'
+        - 'not IsString(attributes["gen_ai.completion.0.content"])'
+        - 'IsMatch(attributes["gen_ai.prompt.0.content"], "^[[:space:]]*$")'
+        - 'IsMatch(attributes["gen_ai.completion.0.content"], "^[[:space:]]*$")'
+  transform/business_metadata:
+    error_mode: propagate
+    trace_statements:
+      - context: span
+        statements:
+          - 'delete_matching_keys(attributes, "^(http|url|net|network|server|client)[.]")'
+          - 'delete_matching_keys(resource.attributes, "^(http|url|net|network|server|client)[.]")'
+          # Prevent alternate instrumentation names from overriding agent names.
+          - 'delete_key(attributes, "langsmith.trace.name")'
+          - 'delete_key(attributes, "traceloop.entity.name")'
+          - 'delete_key(attributes, "tool.name")'
   batch:
 
 exporters:
@@ -20,5 +44,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [filter/agent_mcp_io, transform/business_metadata, batch]
       exporters: [otlphttp/langsmith]

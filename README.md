@@ -323,6 +323,12 @@ For prompt/input/output inspection during development, stack
 `development` deployment environment and should be used only with synthetic or
 redacted evidence.
 
+LangSmith now keeps only named agents and MCP tools with both meaningful input
+and output. HTTP routes, ports, broker wrappers, and empty runs are excluded;
+trace context still connects the agents. See [focused tracing](docs/langsmith-tracing.md)
+and run `tools/run_langsmith_filter_test.py` for a non-SMS verification against
+your configured LangSmith project. Historical traces are unchanged.
+
 ## Distributed trace correlation
 
 Vertical slice 10 carries one W3C trace across HTTP/A2A, persisted scheduler
@@ -340,8 +346,8 @@ docker compose -f compose.yaml -f compose.langsmith.yaml -f compose.langsmith-de
 docker compose -f compose.yaml up -d --wait --remove-orphans
 ```
 
-The runner requires all agent, MCP, and event spans in one trace, verifies every
-agent input/output, and rejects generic HTTP transport runs. It also proves duplicate
+The runner requires all agent and MCP spans in one trace, verifies every
+agent/tool input/output, and rejects transport or empty runs. It also proves duplicate
 ticks create no second notification or search. See
 [docs/vertical-slice-10.md](docs/vertical-slice-10.md).
 

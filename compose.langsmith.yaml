@@ -20,9 +20,11 @@ services:
   document-agent:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
-      CREWAI_OTEL_ENABLED: "true"
+      CREWAI_OTEL_ENABLED: "false"
       TRACELOOP_TRACE_CONTENT: "false"
     depends_on:
       otel-collector:
@@ -31,6 +33,8 @@ services:
   travel-api:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "agent_roots"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
@@ -40,6 +44,8 @@ services:
   trip-orchestrator:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
@@ -49,6 +55,8 @@ services:
   monitor-agent:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACELOOP_TRACE_CONTENT: "false"
@@ -59,9 +67,11 @@ services:
   eval-agent:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
-      CREWAI_OTEL_ENABLED: "true"
+      CREWAI_OTEL_ENABLED: "false"
       TRACELOOP_TRACE_CONTENT: "false"
     depends_on:
       otel-collector:
@@ -70,6 +80,8 @@ services:
   notification-action-service:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACELOOP_TRACE_CONTENT: "false"
@@ -80,6 +92,8 @@ services:
   communication-agent:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACELOOP_TRACE_CONTENT: "false"
@@ -90,6 +104,8 @@ services:
   flight-search-action-service:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACELOOP_TRACE_CONTENT: "false"
@@ -100,6 +116,8 @@ services:
   flight-status-mcp:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
@@ -109,6 +127,8 @@ services:
   weather-mcp:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
@@ -118,6 +138,8 @@ services:
   notification-mcp:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
@@ -130,6 +152,8 @@ services:
   flight-search-mcp:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     depends_on:
@@ -143,6 +167,8 @@ services:
   operations-service:
     environment:
       OTEL_TRACING_ENABLED: "true"
+      OTEL_TRACE_SCOPE: "agents_mcp"
+      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       TRACELOOP_TRACE_CONTENT: "false"

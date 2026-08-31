@@ -15,6 +15,7 @@ from flight_agent.monitoring_contracts import (
     ProviderFlightObservation,
 )
 from flight_agent.telemetry import trace_headers, traced
+from flight_agent.mcp_trace_views import flight_status_input, flight_status_output, live_sample_output
 
 
 class FlightStatusGateway(Protocol):
@@ -37,6 +38,8 @@ class StreamableHttpFlightStatusMcpClient:
         "mcp.get_flight_status",
         service_name="monitor-agent",
         kind="tool",
+        content_input=flight_status_input,
+        content_output=flight_status_output,
     )
     def get_flight_status(
         self,
@@ -61,6 +64,8 @@ class StreamableHttpFlightStatusMcpClient:
         "mcp.discover_live_flight_sample",
         service_name="monitor-agent",
         kind="tool",
+        content_input=lambda self, *, limit=10: {"limit": limit},
+        content_output=live_sample_output,
     )
     def discover_live_flight_sample(self, *, limit: int = 10) -> LiveFlightSample:
         payload = asyncio.run(

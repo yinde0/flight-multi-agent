@@ -15,6 +15,7 @@ from flight_agent.flight_search_contracts import (
     FlightSearchToolResult,
 )
 from flight_agent.telemetry import trace_headers, traced
+from flight_agent.mcp_trace_views import search_input, search_output
 
 
 class FlightSearchGateway(Protocol):
@@ -29,6 +30,8 @@ class StreamableHttpFlightSearchMcpClient:
         "mcp.search_flights",
         service_name="flight-search-action-service",
         kind="tool",
+        content_input=search_input,
+        content_output=search_output,
     )
     def search_flights(self, command: FlightSearchCommand) -> FlightSearchToolResult:
         payload = asyncio.run(
