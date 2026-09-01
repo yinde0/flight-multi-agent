@@ -101,6 +101,9 @@ def confirmed_outbox(event: dict[str, Any]) -> dict[str, Any]:
 
 
 async def ensure_event_stream(jetstream) -> None:
+    if getattr(jetstream, "provider_name", "nats") == "sqs":
+        await jetstream.ensure()
+        return
     config = StreamConfig(
         name=EVENT_STREAM_NAME,
         description="Durable travel disruption candidates and confirmed decisions",
@@ -141,6 +144,15 @@ async def subscribe_durable(
     durable_name: str,
     callback,
 ):
+    if hasattr(jetstream, "provider_name"):
+        return await jetstream.subscribe(
+            subject,
+            durable_name=durable_name,
+            callback=callback,
+            stream=EVENT_STREAM_NAME,
+            config=consumer_config(),
+            manual_ack=True,
+        )
     return await jetstream.subscribe(
         subject,
         queue=durable_name,
@@ -173,12 +185,22 @@ async def publish_durable_event(
             service_name=producer_service,
             kind="tool",
             attributes={
-                "messaging.system": "nats",
+                "messaging.system": getattr(jetstream, "provider_name", "nats"),
                 "messaging.destination.name": str(record["subject"]),
             },
         ):
             headers = {"Nats-Msg-Id": message_id or envelope.event_id}
             headers.update(trace_headers())
+            if hasattr(jetstream, "provider_name"):
+                return await jetstream.publish(
+                    str(record["subject"]),
+                    envelope.model_dump_json(exclude_none=True).encode("utf-8"),
+                    stream=EVENT_STREAM_NAME,
+                    headers=headers,
+                    message_id=message_id or envelope.event_id,
+                    target_consumer=record.get("target_consumer"),
+                    timeout=float(os.getenv("EVENT_PUBLISH_TIMEOUT_SECONDS", "5")),
+                )
             return await jetstream.publish(
                 str(record["subject"]),
                 envelope.model_dump_json(exclude_none=True).encode("utf-8"),
@@ -219,7 +241,12 @@ def consume_event_trace(
             service_name=service_name,
             kind="chain",
             attributes={
-                "messaging.system": "nats",
+                "messaging.system": getattr(message, "provider_name", None)
+                or (
+                    "sqs"
+                    if type(message).__name__ == "SqsMessage"
+                    else "nats"
+                ),
                 "messaging.delivery.attempt": delivery_attempt(message),
             },
         ):

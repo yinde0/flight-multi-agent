@@ -40,6 +40,12 @@ The backend release uses the same Compose file but selects only backend services
 so it does not recreate `traveler-ui`. CodeBuild and CodeDeploy automation for
 those two release paths is intentionally kept separate.
 
+AWS tasks set `EVENT_BUS_PROVIDER=sqs`, while local Compose keeps NATS. All
+provider internet calls and the LangSmith OTLP relay terminate at the unified
+MCP task, which is the only backend task needing public egress. Queue topology,
+IAM permissions, idempotency, DLQs, and no-NAT runtime settings are documented
+in [docs/aws-runtime-boundaries.md](docs/aws-runtime-boundaries.md).
+
 Run its focused expected-output check with:
 
 ```powershell
@@ -491,14 +497,13 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-The flight-status, weather, notification, and read-only flight-search tools now
-share one internal `travel-tools-mcp` server. Scoped caller credentials preserve
-least privilege: the monitor receives only status/weather access, while the
-post-Eval notification and search services receive only their action scope. The
-durable JetStream event path, transactional DynamoDB outboxes and live-state
-adapter, Monitoring Agent, Eval Agent, and post-Eval action services now exist.
-The Communication Agent has isolated model egress but no recipient, persistence,
-notification, search, or booking capability.
+Flight status, weather, notification, read-only flight search, Mistral OCR,
+Azure OpenAI wording/extraction, CrewAI shadow reasoning, and LangSmith export
+share one internal `travel-tools-mcp` network boundary. Scoped caller
+credentials preserve least privilege. Local Docker uses durable JetStream; AWS
+uses SQS queues with explicit acknowledgement, visibility renewal, retry/DLQ
+handling, and event-ID idempotency in DynamoDB. Transactional outboxes and the
+live-state adapter remain independent of the selected event transport.
 Trip activation uses an RDS-compatible
 Postgres adapter and an S3-compatible document adapter; Docker supplies local
 Postgres and MinIO instances. `NOTIFY_AND_SEARCH` is never interpreted as

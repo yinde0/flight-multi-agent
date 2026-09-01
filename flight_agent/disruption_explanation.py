@@ -263,6 +263,12 @@ def explanation_provider_from_environment(
     mode = explanation_mode()
     if mode == "off":
         return None
+    if os.getenv("EXTERNAL_CALLS_PROVIDER", "direct").strip().lower() == "mcp":
+        from flight_agent.provider_mcp_clients import (
+            StreamableHttpDisruptionExplanationMcpClient,
+        )
+
+        return StreamableHttpDisruptionExplanationMcpClient()
     provider = AzureOpenAIDisruptionExplanationProvider.from_environment()
     if mode == "auto" and not provider.configured:
         return None

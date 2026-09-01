@@ -11,6 +11,9 @@ from mcp.types import RequestParams
 
 from flight_agent import travel_tools_mcp
 from flight_agent.travel_tools_auth import (
+    COMMUNICATION_SCOPE,
+    DOCUMENT_SCOPE,
+    EVAL_SCOPE,
     MONITOR_SCOPE,
     NOTIFICATION_SCOPE,
     SEARCH_SCOPE,
@@ -32,6 +35,10 @@ def test_unified_server_registers_every_travel_tool() -> None:
         "get_airport_weather",
         "search_flights",
         "send_notification",
+        "extract_ticket_text",
+        "extract_itinerary_with_llm",
+        "generate_disruption_explanation",
+        "review_disruption_decision",
     }
 
 
@@ -49,6 +56,13 @@ def test_unified_server_registers_every_travel_tool() -> None:
             "TRAVEL_TOOLS_NOTIFICATION_TOKEN",
             "notification-action-service",
         ),
+        (DOCUMENT_SCOPE, "TRAVEL_TOOLS_DOCUMENT_TOKEN", "document-agent"),
+        (
+            COMMUNICATION_SCOPE,
+            "TRAVEL_TOOLS_COMMUNICATION_TOKEN",
+            "communication-agent",
+        ),
+        (EVAL_SCOPE, "TRAVEL_TOOLS_EVAL_TOKEN", "eval-agent"),
     ],
 )
 def test_authorized_callers_retain_only_their_tool_scope(
@@ -85,6 +99,9 @@ def test_clients_read_only_their_scope_token(
     monkeypatch.setenv("TRAVEL_TOOLS_MONITOR_TOKEN", "monitor-secret")
     monkeypatch.setenv("TRAVEL_TOOLS_SEARCH_TOKEN", "search-secret")
     monkeypatch.setenv("TRAVEL_TOOLS_NOTIFICATION_TOKEN", "notification-secret")
+    monkeypatch.setenv("TRAVEL_TOOLS_DOCUMENT_TOKEN", "document-secret")
+    monkeypatch.setenv("TRAVEL_TOOLS_COMMUNICATION_TOKEN", "communication-secret")
+    monkeypatch.setenv("TRAVEL_TOOLS_EVAL_TOKEN", "eval-secret")
 
     assert tool_call_meta(MONITOR_SCOPE) == {
         "travel_tools_caller": "monitor-agent",
@@ -97,4 +114,16 @@ def test_clients_read_only_their_scope_token(
     assert tool_call_meta(NOTIFICATION_SCOPE) == {
         "travel_tools_caller": "notification-action-service",
         "travel_tools_token": "notification-secret",
+    }
+    assert tool_call_meta(DOCUMENT_SCOPE) == {
+        "travel_tools_caller": "document-agent",
+        "travel_tools_token": "document-secret",
+    }
+    assert tool_call_meta(COMMUNICATION_SCOPE) == {
+        "travel_tools_caller": "communication-agent",
+        "travel_tools_token": "communication-secret",
+    }
+    assert tool_call_meta(EVAL_SCOPE) == {
+        "travel_tools_caller": "eval-agent",
+        "travel_tools_token": "eval-secret",
     }

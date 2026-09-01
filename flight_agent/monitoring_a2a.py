@@ -33,7 +33,10 @@ from flight_agent.flight_status_mcp_client import (
     StreamableHttpFlightStatusMcpClient,
 )
 from flight_agent.monitoring_contracts import MonitoringPollRequest
-from flight_agent.monitoring_events import CandidatePublisher, NatsCandidatePublisher
+from flight_agent.monitoring_events import (
+    CandidatePublisher,
+    ConfiguredEventBusCandidatePublisher,
+)
 from flight_agent.monitoring_flow import run_monitoring_flow
 from flight_agent.monitoring_store import (
     DynamoMonitoringStateStore,
@@ -161,9 +164,7 @@ def create_monitoring_agent_app(
         if flight_status is not None
         else StreamableHttpWeatherMcpClient(tools_url)
     )
-    resolved_publisher = publisher or NatsCandidatePublisher(
-        os.getenv("NATS_URL", "nats://127.0.0.1:4222")
-    )
+    resolved_publisher = publisher or ConfiguredEventBusCandidatePublisher()
     resolved_url = public_url or os.getenv(
         "MONITOR_AGENT_PUBLIC_URL", "http://127.0.0.1:8004"
     )

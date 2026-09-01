@@ -10,16 +10,25 @@ from mcp.server.fastmcp.exceptions import ToolError
 MONITOR_SCOPE = "monitor"
 SEARCH_SCOPE = "search"
 NOTIFICATION_SCOPE = "notification"
+DOCUMENT_SCOPE = "document"
+COMMUNICATION_SCOPE = "communication"
+EVAL_SCOPE = "eval"
 
 _SCOPE_CALLERS = {
     MONITOR_SCOPE: "monitor-agent",
     SEARCH_SCOPE: "flight-search-action-service",
     NOTIFICATION_SCOPE: "notification-action-service",
+    DOCUMENT_SCOPE: "document-agent",
+    COMMUNICATION_SCOPE: "communication-agent",
+    EVAL_SCOPE: "eval-agent",
 }
 _SCOPE_TOKEN_ENV = {
     MONITOR_SCOPE: "TRAVEL_TOOLS_MONITOR_TOKEN",
     SEARCH_SCOPE: "TRAVEL_TOOLS_SEARCH_TOKEN",
     NOTIFICATION_SCOPE: "TRAVEL_TOOLS_NOTIFICATION_TOKEN",
+    DOCUMENT_SCOPE: "TRAVEL_TOOLS_DOCUMENT_TOKEN",
+    COMMUNICATION_SCOPE: "TRAVEL_TOOLS_COMMUNICATION_TOKEN",
+    EVAL_SCOPE: "TRAVEL_TOOLS_EVAL_TOKEN",
 }
 
 

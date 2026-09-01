@@ -277,7 +277,15 @@ def reasoning_mode() -> str:
 
 
 def reasoner_from_environment() -> EvalReasoner | None:
-    return CrewAIEvalReasoner() if reasoning_mode() == "shadow" else None
+    if reasoning_mode() != "shadow":
+        return None
+    if os.getenv("EXTERNAL_CALLS_PROVIDER", "direct").strip().lower() == "mcp":
+        from flight_agent.provider_mcp_clients import (
+            StreamableHttpEvalReasonerMcpClient,
+        )
+
+        return StreamableHttpEvalReasonerMcpClient()
+    return CrewAIEvalReasoner()
 
 
 def advisory_record(

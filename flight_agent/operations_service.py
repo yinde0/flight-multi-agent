@@ -67,14 +67,14 @@ def _record_for_redrive(
         record = candidate_outbox(payload)
         if record["subject"] != DISRUPTION_CANDIDATE_SUBJECT:
             raise ValueError("Candidate subject mismatch")
-        return record
+        return {**record, "target_consumer": consumer}
     event = ConfirmedDisruptionEvent.model_validate(payload)
     if event.decision_id != event_id:
         raise ValueError("Confirmed dead letter does not match its event ID")
     record = confirmed_outbox(event.model_dump(mode="json"))
     if record["subject"] != DISRUPTION_CONFIRMED_SUBJECT:
         raise ValueError("Confirmed subject mismatch")
-    return record
+    return {**record, "target_consumer": consumer}
 
 
 def _metric_lines(

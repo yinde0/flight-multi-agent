@@ -6,16 +6,12 @@ services:
     volumes:
       - ./otel-collector-langsmith.yaml:/etc/otelcol/langsmith.yaml:ro
     environment:
-      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:?LANGSMITH_API_KEY is required}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-flight-multi-agent}
-      # LANGSMITH_ENDPOINT is the standard account/region base URL. The
-      # full override remains available for unusual self-hosted routing.
-      LANGSMITH_OTEL_ENDPOINT: ${LANGSMITH_OTEL_ENDPOINT:-${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}/otel/v1/traces}
+      MCP_OTEL_RELAY_ENDPOINT: http://travel-tools-mcp:8003/otel/v1/traces
+      TRAVEL_TOOLS_TELEMETRY_TOKEN: ${TRAVEL_TOOLS_TELEMETRY_TOKEN:-local-telemetry-tools-token}
     expose:
       - "4318"
     networks:
       - travel-internal
-      - observability-egress
 
   document-agent:
     environment:
@@ -120,6 +116,11 @@ services:
       OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
       OTEL_HTTP_TRACE_MODE: "off"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:?LANGSMITH_API_KEY is required}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-flight-multi-agent}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
+      LANGSMITH_OTEL_ENDPOINT: ${LANGSMITH_OTEL_ENDPOINT:-}
+      TRAVEL_TOOLS_TELEMETRY_TOKEN: ${TRAVEL_TOOLS_TELEMETRY_TOKEN:-local-telemetry-tools-token}
     depends_on:
       otel-collector:
         condition: service_started
@@ -138,6 +139,3 @@ services:
     depends_on:
       otel-collector:
         condition: service_started
-
-networks:
-  observability-egress:

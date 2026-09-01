@@ -25,7 +25,10 @@ from flight_agent.flight_status_mcp_client import (
     StreamableHttpFlightStatusMcpClient,
 )
 from flight_agent.monitoring_contracts import MonitoringPollOutcome, MonitoringPollRequest
-from flight_agent.monitoring_events import CandidatePublisher, NatsCandidatePublisher
+from flight_agent.monitoring_events import (
+    CandidatePublisher,
+    ConfiguredEventBusCandidatePublisher,
+)
 from flight_agent.monitoring_store import DynamoMonitoringStateStore, MonitoringStore
 from flight_agent.telemetry import hash_reference, traced
 from flight_agent.weather import NeutralWeatherGateway
@@ -327,7 +330,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                             "mcp.get_flight_status",
                             "mcp.get_airport_weather",
                             "dynamodb.diff_last_evidence",
-                            "nats.publish_failed",
+                            "event_bus.publish_failed",
                         ],
                         "mcp_calls": 2,
                         "weather_evidence": weather_meta,
@@ -378,7 +381,7 @@ class FlightMonitoringFlow(Flow[MonitoringState]):
                         "mcp.get_flight_status",
                         "mcp.get_airport_weather",
                         "dynamodb.diff_last_evidence",
-                        "nats.publish_disruption_candidate",
+                        "event_bus.publish_disruption_candidate",
                         "eval_agent.consume_candidate",
                         "a2a.communication.explain_disruption",
                         "notification_action.consume_confirmed",
@@ -539,7 +542,7 @@ def run_monitoring_flow(
         weather=resolved_weather,
         store=resolved_store,
         publisher=publisher
-        or NatsCandidatePublisher(os.getenv("NATS_URL", "nats://127.0.0.1:4222")),
+        or ConfiguredEventBusCandidatePublisher(),
     )
     result = flow.kickoff(inputs={"request": request.model_dump(mode="json")})
     if not isinstance(result, dict):

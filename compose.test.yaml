@@ -26,18 +26,12 @@ services:
     networks:
       - travel-internal
 
-  document-agent:
+  travel-tools-mcp:
     environment:
       MISTRAL_API_KEY: local-mistral-test-key
       MISTRAL_OCR_BASE_URL: http://mistral-ocr-stub:8002/v1
       MISTRAL_OCR_MODEL: mistral-ocr-latest
-      NO_PROXY: mistral-ocr-stub,document-agent,localhost,127.0.0.1
-    depends_on:
-      mistral-ocr-stub:
-        condition: service_healthy
-
-  travel-tools-mcp:
-    environment:
+      NO_PROXY: mistral-ocr-stub,travel-tools-mcp,localhost,127.0.0.1
       FLIGHT_STATUS_PROVIDER: replay
       AviationStack_API_KEY: local-unused
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json
@@ -47,6 +41,9 @@ services:
       # Golden tests must never contact a real notification provider, even when a
       # developer's local .env enables Twilio.
       NOTIFICATION_PROVIDER: recording
+    depends_on:
+      mistral-ocr-stub:
+        condition: service_healthy
 
   notification-action-service:
     environment:

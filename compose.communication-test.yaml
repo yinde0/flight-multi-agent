@@ -2,6 +2,14 @@ services:
   travel-tools-mcp:
     environment:
       NOTIFICATION_PROVIDER: recording
+      AZURE_OPENAI_ENDPOINT: http://azure-openai-stub:8016
+      AZURE_OPENAI_API_KEY: local-azure-openai-test-key
+      AZURE_OPENAI_DEPLOYMENT: fixture-gpt-deployment
+      AZURE_OPENAI_API_VERSION: "2024-10-21"
+      NO_PROXY: azure-openai-stub,travel-tools-mcp,localhost,127.0.0.1
+    depends_on:
+      azure-openai-stub:
+        condition: service_healthy
 
   notification-action-service:
     environment:
@@ -37,11 +45,3 @@ services:
   communication-agent:
     environment:
       DISRUPTION_EXPLANATION_MODE: azure
-      AZURE_OPENAI_ENDPOINT: http://azure-openai-stub:8016
-      AZURE_OPENAI_API_KEY: local-azure-openai-test-key
-      AZURE_OPENAI_DEPLOYMENT: fixture-gpt-deployment
-      AZURE_OPENAI_API_VERSION: "2024-10-21"
-      NO_PROXY: azure-openai-stub,communication-agent,localhost,127.0.0.1
-    depends_on:
-      azure-openai-stub:
-        condition: service_healthy

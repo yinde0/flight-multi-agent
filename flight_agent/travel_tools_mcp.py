@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 import secrets
 import threading
 
 from pathlib import Path
 
+import httpx
+
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.responses import Response
+
+from flight_agent.disruption_explanation import (
+    AzureOpenAIDisruptionExplanationProvider,
+    DisruptionExplanationRequest,
+)
+from flight_agent.eval_reasoning import CrewAIEvalReasoner
 
 from flight_agent.flight_search import (
     DisabledFlightSearchProvider,
@@ -41,8 +52,13 @@ from flight_agent.notification_contracts import (
     NotificationSubmissionFailure,
 )
 from flight_agent.notification_errors import NotificationSubmissionError
+from flight_agent.itinerary_llm import AzureOpenAIItineraryProvider
+from flight_agent.ocr import MistralOcrProvider
 from flight_agent.telemetry import install_trace_middleware
 from flight_agent.travel_tools_auth import (
+    COMMUNICATION_SCOPE,
+    DOCUMENT_SCOPE,
+    EVAL_SCOPE,
     MONITOR_SCOPE,
     NOTIFICATION_SCOPE,
     SEARCH_SCOPE,
@@ -102,6 +118,12 @@ class NotificationFailureGate:
 
 
 notification_failure_gate = NotificationFailureGate()
+
+# Provider credentials exist only in this network-broker process. Other agents
+# call these adapters through authenticated MCP tools.
+ocr_provider = MistralOcrProvider.from_environment()
+itinerary_llm_provider = AzureOpenAIItineraryProvider.from_environment()
+explanation_provider = AzureOpenAIDisruptionExplanationProvider.from_environment()
 
 
 mcp = FastMCP(
@@ -219,6 +241,83 @@ def send_notification(
         return error.failure
 
 
+@mcp.tool(
+    name="extract_ticket_text",
+    description="Extract text from an image-only ticket PDF with Mistral OCR.",
+    structured_output=True,
+)
+def extract_ticket_text(pdf_base64: str, ctx: Context) -> dict[str, object]:
+    authorize_tool_call(ctx, DOCUMENT_SCOPE)
+    try:
+        document = base64.b64decode(pdf_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("pdf_base64 must contain a valid base64 PDF") from error
+    maximum = int(os.getenv("MCP_MAX_PDF_BYTES", "15728640"))
+    if not document or len(document) > maximum or not document.startswith(b"%PDF"):
+        raise ValueError("Document is not a valid PDF or exceeds the MCP size limit")
+    extraction = ocr_provider.extract_pdf(document)
+    return {
+        "text": extraction.text,
+        "provider": extraction.provider,
+        "model": extraction.model,
+        "page_count": extraction.page_count,
+    }
+
+
+@mcp.tool(
+    name="extract_itinerary_with_llm",
+    description="Extract a schema-constrained itinerary using Azure OpenAI.",
+    structured_output=True,
+)
+def extract_itinerary_with_llm(
+    ticket_text: str, ctx: Context
+) -> dict[str, object]:
+    authorize_tool_call(ctx, DOCUMENT_SCOPE)
+    extraction = itinerary_llm_provider.extract_itinerary(ticket_text)
+    return {
+        "model": itinerary_llm_provider.model_name,
+        "extraction": extraction.model_dump(mode="json"),
+    }
+
+
+@mcp.tool(
+    name="generate_disruption_explanation",
+    description="Generate friendly wording from Eval-approved disruption facts.",
+    structured_output=True,
+)
+def generate_disruption_explanation(
+    request: DisruptionExplanationRequest, ctx: Context
+) -> dict[str, object]:
+    authorize_tool_call(ctx, COMMUNICATION_SCOPE)
+    explanation = explanation_provider.explain(request)
+    return {
+        "model": explanation_provider.model_name,
+        "explanation": explanation.model_dump(mode="json"),
+    }
+
+
+@mcp.tool(
+    name="review_disruption_decision",
+    description=(
+        "Run the tool-free CrewAI shadow reviewer; deterministic policy remains authoritative."
+    ),
+    structured_output=True,
+)
+def review_disruption_decision(
+    candidate: dict,
+    policy: dict,
+    deterministic_decision: dict,
+    ctx: Context,
+) -> dict[str, object]:
+    authorize_tool_call(ctx, EVAL_SCOPE)
+    reasoner = CrewAIEvalReasoner()
+    advisory = reasoner.recommend(candidate, policy, deterministic_decision)
+    return {
+        "model": reasoner.model_name,
+        "advisory": advisory.model_dump(mode="json"),
+    }
+
+
 @mcp.custom_route("/health/live", methods=["GET"])
 async def health(request: Request) -> JSONResponse:
     del request
@@ -230,12 +329,80 @@ async def health(request: Request) -> JSONResponse:
                 "weather": type(weather_provider).__name__,
                 "flight_search": flight_search_provider.name,
                 "notification": notification_provider_name,
+                "ocr": type(ocr_provider).__name__,
+                "itinerary_llm": type(itinerary_llm_provider).__name__,
+                "explanation_llm": type(explanation_provider).__name__,
             },
             "authorization_enabled": (
                 os.getenv("TRAVEL_TOOLS_AUTH_ENABLED", "false").lower() == "true"
             ),
         }
     )
+
+
+@mcp.custom_route("/otel/v1/traces", methods=["POST"])
+async def forward_langsmith_traces(request: Request) -> Response:
+    """Private OTLP relay so agent tasks never need public internet access."""
+
+    expected = os.getenv("TRAVEL_TOOLS_TELEMETRY_TOKEN", "")
+    supplied = request.headers.get("x-travel-tools-token", "")
+    if (
+        not expected
+        and os.getenv("DEPLOYMENT_ENVIRONMENT", "development") != "development"
+    ):
+        return JSONResponse(
+            {"detail": "LangSmith relay authorization is not configured"},
+            status_code=503,
+        )
+    if expected and (
+        not supplied or not secrets.compare_digest(expected, supplied)
+    ):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    api_key = os.getenv("LANGSMITH_API_KEY", "").strip()
+    project = os.getenv("LANGSMITH_PROJECT", "flight-multi-agent").strip()
+    endpoint = os.getenv("LANGSMITH_OTEL_ENDPOINT", "").strip()
+    if not endpoint:
+        endpoint = (
+            os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+            .rstrip("/")
+            + "/otel/v1/traces"
+        )
+    if not api_key:
+        return JSONResponse(
+            {"detail": "LangSmith relay is not configured"}, status_code=503
+        )
+    body = await request.body()
+    if len(body) > int(os.getenv("LANGSMITH_RELAY_MAX_BYTES", "5242880")):
+        return JSONResponse(
+            {"detail": "OTLP batch exceeds the relay size limit"},
+            status_code=413,
+        )
+    headers = {
+        "x-api-key": api_key,
+        "Langsmith-Project": project,
+        "Content-Type": request.headers.get(
+            "content-type", "application/x-protobuf"
+        ),
+    }
+    content_encoding = request.headers.get("content-encoding")
+    if content_encoding:
+        headers["Content-Encoding"] = content_encoding
+    try:
+        async with httpx.AsyncClient(
+            timeout=float(os.getenv("LANGSMITH_RELAY_TIMEOUT_SECONDS", "10"))
+        ) as client:
+            response = await client.post(
+                endpoint, content=body, headers=headers
+            )
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            media_type=response.headers.get("content-type"),
+        )
+    except httpx.HTTPError:
+        return JSONResponse(
+            {"detail": "LangSmith relay unavailable"}, status_code=503
+        )
 
 
 @mcp.custom_route("/v1/reliability/audit", methods=["GET"])

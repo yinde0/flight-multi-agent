@@ -35,10 +35,9 @@ exporters:
   otlphttp/langsmith:
     # This value is already the complete signal URL. Using `endpoint` would
     # make the collector append another /v1/traces path.
-    traces_endpoint: ${env:LANGSMITH_OTEL_ENDPOINT}
+    traces_endpoint: ${env:MCP_OTEL_RELAY_ENDPOINT}
     headers:
-      x-api-key: ${env:LANGSMITH_API_KEY}
-      Langsmith-Project: ${env:LANGSMITH_PROJECT}
+      x-travel-tools-token: ${env:TRAVEL_TOOLS_TELEMETRY_TOKEN}
 
 service:
   pipelines:

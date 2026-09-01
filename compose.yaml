@@ -117,6 +117,11 @@ services:
       TRAVEL_TOOLS_MONITOR_TOKEN: ${TRAVEL_TOOLS_MONITOR_TOKEN:-local-monitor-tools-token}
       TRAVEL_TOOLS_SEARCH_TOKEN: ${TRAVEL_TOOLS_SEARCH_TOKEN:-local-search-tools-token}
       TRAVEL_TOOLS_NOTIFICATION_TOKEN: ${TRAVEL_TOOLS_NOTIFICATION_TOKEN:-local-notification-tools-token}
+      TRAVEL_TOOLS_DOCUMENT_TOKEN: ${TRAVEL_TOOLS_DOCUMENT_TOKEN:-local-document-tools-token}
+      TRAVEL_TOOLS_COMMUNICATION_TOKEN: ${TRAVEL_TOOLS_COMMUNICATION_TOKEN:-local-communication-tools-token}
+      TRAVEL_TOOLS_EVAL_TOKEN: ${TRAVEL_TOOLS_EVAL_TOKEN:-local-eval-tools-token}
+      TRAVEL_TOOLS_TELEMETRY_TOKEN: ${TRAVEL_TOOLS_TELEMETRY_TOKEN:-local-telemetry-tools-token}
+      EXTERNAL_CALLS_PROVIDER: direct
       FLIGHT_STATUS_PROVIDER: ${FLIGHT_STATUS_PROVIDER:-aviationstack}
       AviationStack_API_KEY: ${AviationStack_API_KEY:-}
       AVIATIONSTACK_BASE_URL: ${AVIATIONSTACK_BASE_URL:-https://api.aviationstack.com/v1}
@@ -148,6 +153,19 @@ services:
       TWILIO_SMS_BODY_OVERRIDE: ${TWILIO_SMS_BODY_OVERRIDE:-}
       TWILIO_BASE_URL: ${TWILIO_BASE_URL:-https://api.twilio.com/2010-04-01}
       TWILIO_TIMEOUT_SECONDS: ${TWILIO_TIMEOUT_SECONDS:-30}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_OCR_BASE_URL: ${MISTRAL_OCR_BASE_URL:-https://api.mistral.ai/v1}
+      MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
+      MISTRAL_OCR_TIMEOUT_SECONDS: ${MISTRAL_OCR_TIMEOUT_SECONDS:-60}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-${AZURE_ENDPOINT:-}}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-${AZURE_API_KEY:-}}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-${CHAT_DEPLOYMENT:-}}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-${CHAT_API_VERSION:-2024-10-21}}
+      DOCUMENT_LLM_TIMEOUT_SECONDS: ${DOCUMENT_LLM_TIMEOUT_SECONDS:-45}
+      DOCUMENT_LLM_MAX_INPUT_CHARS: ${DOCUMENT_LLM_MAX_INPUT_CHARS:-30000}
+      DISRUPTION_EXPLANATION_TIMEOUT_SECONDS: ${DISRUPTION_EXPLANATION_TIMEOUT_SECONDS:-30}
+      EVAL_REASONING_MODEL: ${EVAL_REASONING_MODEL:-mistral/mistral-small-latest}
+      EVAL_REASONING_PROMPT_PATH: /app/travel_eval/prompts/eval_advisory.v1.md
     expose:
       - "8003"
     healthcheck:
@@ -179,14 +197,17 @@ services:
       AWS_REGION: eu-west-2
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
+      EVENT_BUS_PROVIDER: ${EVENT_BUS_PROVIDER:-nats}
       NATS_URL: nats://nats:4222
+      TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
+      TRAVEL_TOOLS_EVAL_TOKEN: ${TRAVEL_TOOLS_EVAL_TOKEN:-local-eval-tools-token}
+      EXTERNAL_CALLS_PROVIDER: mcp
       SUPPRESSION_POLICY_PATH: /app/travel_eval/policies/suppression_policy.v1.json
       EVAL_REASONING_MODE: ${EVAL_REASONING_MODE:-off}
       EVAL_REASONING_MODEL: ${EVAL_REASONING_MODEL:-mistral/mistral-small-latest}
       EVAL_REASONING_PROMPT_PATH: /app/travel_eval/prompts/eval_advisory.v1.md
       EVAL_REASONING_TIMEOUT_SECONDS: ${EVAL_REASONING_TIMEOUT_SECONDS:-45}
       EVAL_REASONING_MAX_TOKENS: ${EVAL_REASONING_MAX_TOKENS:-700}
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       CREWAI_DISABLE_TELEMETRY: "true"
       CREWAI_DISABLE_TRACKING: "true"
       CREWAI_DISABLE_VERSION_CHECK: "true"
@@ -194,6 +215,8 @@ services:
       dynamodb-local:
         condition: service_started
       nats:
+        condition: service_healthy
+      travel-tools-mcp:
         condition: service_healthy
     expose:
       - "8005"
@@ -225,6 +248,7 @@ services:
       AWS_REGION: eu-west-2
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
+      EVENT_BUS_PROVIDER: ${EVENT_BUS_PROVIDER:-nats}
       NATS_URL: nats://nats:4222
       # No fallback credential: operator endpoints remain disabled until an
       # explicit secret is injected. Health and Prometheus metrics stay public
@@ -291,7 +315,6 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - tools-egress
 
   notification-action-service:
     <<: *backend-service
@@ -308,9 +331,11 @@ services:
       AWS_REGION: eu-west-2
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
+      EVENT_BUS_PROVIDER: ${EVENT_BUS_PROVIDER:-nats}
       NATS_URL: nats://nats:4222
       TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
       TRAVEL_TOOLS_NOTIFICATION_TOKEN: ${TRAVEL_TOOLS_NOTIFICATION_TOKEN:-local-notification-tools-token}
+      EXTERNAL_CALLS_PROVIDER: mcp
       COMMUNICATION_AGENT_URL: http://communication-agent:8017
       COMMUNICATION_AGENT_TIMEOUT_SECONDS: ${COMMUNICATION_AGENT_TIMEOUT_SECONDS:-35}
       NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
@@ -355,13 +380,15 @@ services:
       COMMUNICATION_AGENT_PUBLIC_URL: http://communication-agent:8017
       DISRUPTION_EXPLANATION_MODE: ${DISRUPTION_EXPLANATION_MODE:-auto}
       DISRUPTION_EXPLANATION_TIMEOUT_SECONDS: ${DISRUPTION_EXPLANATION_TIMEOUT_SECONDS:-30}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-${AZURE_ENDPOINT:-}}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-${AZURE_API_KEY:-}}
-      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-${CHAT_DEPLOYMENT:-}}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-${CHAT_API_VERSION:-2024-10-21}}
-      NO_PROXY: communication-agent,localhost,127.0.0.1
+      TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
+      TRAVEL_TOOLS_COMMUNICATION_TOKEN: ${TRAVEL_TOOLS_COMMUNICATION_TOKEN:-local-communication-tools-token}
+      EXTERNAL_CALLS_PROVIDER: mcp
+      NO_PROXY: travel-tools-mcp,communication-agent,localhost,127.0.0.1
     expose:
       - "8017"
+    depends_on:
+      travel-tools-mcp:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -374,7 +401,6 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - communication-egress
 
   flight-search-action-service:
     <<: *backend-service
@@ -391,6 +417,7 @@ services:
       AWS_REGION: eu-west-2
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
+      EVENT_BUS_PROVIDER: ${EVENT_BUS_PROVIDER:-nats}
       NATS_URL: nats://nats:4222
       TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
       TRAVEL_TOOLS_SEARCH_TOKEN: ${TRAVEL_TOOLS_SEARCH_TOKEN:-local-search-tools-token}
@@ -434,6 +461,7 @@ services:
       AWS_REGION: eu-west-2
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
+      EVENT_BUS_PROVIDER: ${EVENT_BUS_PROVIDER:-nats}
       TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
       TRAVEL_TOOLS_MONITOR_TOKEN: ${TRAVEL_TOOLS_MONITOR_TOKEN:-local-monitor-tools-token}
       MONITOR_AGENT_PUBLIC_URL: http://monitor-agent:8004
@@ -480,20 +508,18 @@ services:
       CREWAI_DISABLE_TELEMETRY: "true"
       CREWAI_TESTING: "true"
       DOCUMENT_AGENT_PUBLIC_URL: http://document-agent:8001
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
-      MISTRAL_OCR_BASE_URL: ${MISTRAL_OCR_BASE_URL:-https://api.mistral.ai/v1}
-      MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
-      MISTRAL_OCR_TIMEOUT_SECONDS: ${MISTRAL_OCR_TIMEOUT_SECONDS:-60}
+      TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
+      TRAVEL_TOOLS_DOCUMENT_TOKEN: ${TRAVEL_TOOLS_DOCUMENT_TOKEN:-local-document-tools-token}
+      EXTERNAL_CALLS_PROVIDER: mcp
       DOCUMENT_LLM_MODE: ${DOCUMENT_LLM_MODE:-off}
       DOCUMENT_LLM_MIN_CONFIDENCE: ${DOCUMENT_LLM_MIN_CONFIDENCE:-0.90}
       DOCUMENT_LLM_MAX_INPUT_CHARS: ${DOCUMENT_LLM_MAX_INPUT_CHARS:-30000}
       DOCUMENT_LLM_TIMEOUT_SECONDS: ${DOCUMENT_LLM_TIMEOUT_SECONDS:-45}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-${AZURE_ENDPOINT:-}}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-${AZURE_API_KEY:-}}
-      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-${CHAT_DEPLOYMENT:-}}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-${CHAT_API_VERSION:-2024-10-21}}
     expose:
       - "8001"
+    depends_on:
+      travel-tools-mcp:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -506,7 +532,6 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - document-egress
 
   trip-orchestrator:
     <<: *backend-service
@@ -625,9 +650,7 @@ networks:
   travel-internal:
     internal: true
   travel-edge:
-  document-egress:
   tools-egress:
-  communication-egress:
 
 volumes:
   dynamodb-data:

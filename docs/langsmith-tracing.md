@@ -9,8 +9,10 @@ existing broader tracing and operational metrics.
 
 - Named `agent.*` operations: document parsing, orchestration, monitoring, Eval,
   communication, and rebooking search. Existing agent prompt/result views remain.
-- Named `mcp.*` calls: flight status, live-flight discovery, weather, notifications,
-  and alternative-flight search, each with a selected input and result view.
+- Named `mcp.*` calls: flight status, live-flight discovery, weather,
+  notifications, alternative-flight search, OCR, itinerary extraction,
+  disruption wording, and Eval shadow review, each with a selected input and
+  result view.
 - Safe error outcomes (`status` and exception type) when an operation fails after
   receiving a meaningful input. Exception messages and stack traces are not sent
   in this mode.
@@ -29,9 +31,11 @@ spans. Metrics and application logs remain available for operational diagnostics
 
 Suppressed transport operations do not create spans in the application, and
 CrewAI and A2A SDK auto-instrumentation are disabled in this scope. HTTP, A2A, stored trip
-context, and NATS still carry the current agent's W3C context, so the next agent
+context, and the selected NATS/SQS event bus still carry the current agent's W3C context, so the next agent
 is connected to the previous visible operation without hidden transport parents.
 The collector is a second allowlist and input/output check for all incoming spans.
+It sends accepted OTLP batches to the unified MCP relay, which is the only
+backend service that holds the LangSmith key or opens provider internet egress.
 
 An old trip can still reference an older trace created before this change. New
 trips show the cleanest complete tree. Historical LangSmith runs are not deleted.

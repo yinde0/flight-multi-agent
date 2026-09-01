@@ -39,6 +39,10 @@ from flight_agent.ocr import (
     OcrProvider,
 )
 from flight_agent.parser import extract_pdf_text, parse_extracted_text, review_outcome
+from flight_agent.provider_mcp_clients import (
+    StreamableHttpItineraryLlmMcpClient,
+    StreamableHttpOcrMcpClient,
+)
 from flight_agent.telemetry import hash_reference, traced
 
 
@@ -75,9 +79,18 @@ class DocumentParsingFlow(Flow[DocumentParsingState]):
         llm_min_confidence: float | None = None,
     ) -> None:
         super().__init__()
-        self._ocr_provider = ocr_provider or MistralOcrProvider.from_environment()
-        self._llm_provider = (
-            llm_provider or AzureOpenAIItineraryProvider.from_environment()
+        external_mode = os.getenv("EXTERNAL_CALLS_PROVIDER", "direct").strip().lower()
+        if external_mode not in {"direct", "mcp"}:
+            raise ValueError("EXTERNAL_CALLS_PROVIDER must be direct or mcp")
+        self._ocr_provider = ocr_provider or (
+            StreamableHttpOcrMcpClient()
+            if external_mode == "mcp"
+            else MistralOcrProvider.from_environment()
+        )
+        self._llm_provider = llm_provider or (
+            StreamableHttpItineraryLlmMcpClient()
+            if external_mode == "mcp"
+            else AzureOpenAIItineraryProvider.from_environment()
         )
         self._llm_mode = (
             llm_mode or os.getenv("DOCUMENT_LLM_MODE", "off")

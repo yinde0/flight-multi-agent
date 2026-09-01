@@ -30,14 +30,17 @@ services:
     networks:
       - travel-internal
 
-  document-agent:
+  travel-tools-mcp:
     environment:
-      DOCUMENT_LLM_MODE: fallback
       AZURE_OPENAI_ENDPOINT: http://azure-openai-stub:8016
       AZURE_OPENAI_API_KEY: local-azure-openai-test-key
       AZURE_OPENAI_DEPLOYMENT: fixture-gpt-deployment
       AZURE_OPENAI_API_VERSION: "2024-10-21"
-      NO_PROXY: mistral-ocr-stub,azure-openai-stub,document-agent,localhost,127.0.0.1
+      NO_PROXY: mistral-ocr-stub,azure-openai-stub,travel-tools-mcp,localhost,127.0.0.1
     depends_on:
       azure-openai-stub:
         condition: service_healthy
+
+  document-agent:
+    environment:
+      DOCUMENT_LLM_MODE: fallback

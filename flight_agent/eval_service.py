@@ -8,8 +8,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-import nats
-
 from fastapi import FastAPI, HTTPException
 
 from flight_agent.eval_reasoning import (
@@ -19,6 +17,7 @@ from flight_agent.eval_reasoning import (
     candidate_trace_evidence,
     reasoner_from_environment,
 )
+from flight_agent.event_bus import connect_event_bus
 from flight_agent.event_delivery import (
     EVAL_CONSUMER,
     EVENT_STREAM_NAME,
@@ -196,18 +195,12 @@ def commit_evaluation(
 
 
 async def connect_nats(url: str, *, timeout_seconds: float = 30.0):
-    deadline = asyncio.get_running_loop().time() + timeout_seconds
-    while True:
-        try:
-            return await nats.connect(
-                servers=[url],
-                connect_timeout=2,
-                max_reconnect_attempts=10,
-            )
-        except Exception:
-            if asyncio.get_running_loop().time() >= deadline:
-                raise
-            await asyncio.sleep(0.5)
+    """Compatibility seam returning the configured NATS or SQS event bus."""
+
+    return await connect_event_bus(
+        nats_url=url,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def create_eval_app(
