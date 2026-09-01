@@ -16,6 +16,7 @@ from flight_agent.flight_search_contracts import (
 )
 from flight_agent.telemetry import trace_headers, traced
 from flight_agent.mcp_trace_views import search_input, search_output
+from flight_agent.travel_tools_auth import SEARCH_SCOPE, tool_call_meta
 
 
 class FlightSearchGateway(Protocol):
@@ -49,7 +50,11 @@ class StreamableHttpFlightSearchMcpClient:
             ) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
-                    result = await session.call_tool(name, arguments=arguments)
+                    result = await session.call_tool(
+                        name,
+                        arguments=arguments,
+                        meta=tool_call_meta(SEARCH_SCOPE),
+                    )
         if result.isError:
             raise RuntimeError("Flight search MCP tool returned an error")
         payload = result.structuredContent

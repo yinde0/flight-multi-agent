@@ -1,5 +1,5 @@
 services:
-  notification-mcp:
+  travel-tools-mcp:
     environment:
       NOTIFICATION_PROVIDER: recording
 
@@ -8,8 +8,10 @@ services:
       NOTIFICATION_PROVIDER: recording
 
   azure-openai-stub:
+    image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
     build:
       context: .
+      dockerfile: Dockerfile.backend
     command:
       - uvicorn
       - flight_agent.azure_openai_stub:app

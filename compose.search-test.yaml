@@ -1,15 +1,9 @@
 services:
-  flight-status-mcp:
+  travel-tools-mcp:
     environment:
       FLIGHT_STATUS_PROVIDER: replay
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_06_flight_timeline.json
-
-  weather-mcp:
-    environment:
       WEATHER_PROVIDER: replay
       WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_06_weather_timeline.json
-
-  flight-search-mcp:
-    environment:
       FLIGHT_SEARCH_PROVIDER: replay
       FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_06_options.json

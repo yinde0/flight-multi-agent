@@ -13,6 +13,7 @@ from mcp.types import TextContent
 from flight_agent.monitoring_contracts import ProviderWeatherObservation
 from flight_agent.telemetry import trace_headers, traced
 from flight_agent.mcp_trace_views import weather_input, weather_output
+from flight_agent.travel_tools_auth import MONITOR_SCOPE, tool_call_meta
 
 
 class WeatherGateway(Protocol):
@@ -64,7 +65,11 @@ class StreamableHttpWeatherMcpClient:
             ) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
-                    result = await session.call_tool(name, arguments=arguments)
+                    result = await session.call_tool(
+                        name,
+                        arguments=arguments,
+                        meta=tool_call_meta(MONITOR_SCOPE),
+                    )
         if result.isError:
             raise RuntimeError("Weather MCP tool returned an error")
         payload = result.structuredContent

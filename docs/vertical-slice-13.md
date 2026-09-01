@@ -41,7 +41,7 @@ secret. For local testing only, `TWILIO_AUTH_TOKEN` can replace the API key and
 secret. `TWILIO_FROM_NUMBER` can replace the Messaging Service SID, although a
 Messaging Service is preferred for sender selection and opt-out management.
 
-Credentials stay in `.env` and are injected only into `notification-mcp`.
+Credentials stay in `.env` and are injected only into `travel-tools-mcp`.
 
 ## Replayable vertical test
 

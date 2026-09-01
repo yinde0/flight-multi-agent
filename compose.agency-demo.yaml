@@ -1,7 +1,9 @@
 services:
   flight-agency-simulator:
+    image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
     build:
       context: .
+      dockerfile: Dockerfile.backend
     command:
       - uvicorn
       - flight_agent.flight_agency_service:app
@@ -27,31 +29,22 @@ services:
       - travel-internal
       - travel-edge
 
-  flight-status-mcp:
+  travel-tools-mcp:
     environment:
       FLIGHT_STATUS_PROVIDER: agency
       FLIGHT_AGENCY_BASE_URL: http://flight-agency-simulator:8015
       FLIGHT_AGENCY_CONTROL_TOKEN: ${FLIGHT_AGENCY_DEMO_TOKEN:-local-flight-agency-demo}
       FLIGHT_AGENCY_TIMEOUT_SECONDS: "15"
       NO_PROXY: flight-agency-simulator,localhost,127.0.0.1
+      WEATHER_PROVIDER: replay
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_07_weather_timeline.json
+      FLIGHT_SEARCH_PROVIDER: replay
+      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_07_options.json
+      # Real SMS requires the explicit DEMO_NOTIFICATION_PROVIDER=twilio opt-in.
+      NOTIFICATION_PROVIDER: ${DEMO_NOTIFICATION_PROVIDER:-recording}
     depends_on:
       flight-agency-simulator:
         condition: service_healthy
-
-  weather-mcp:
-    environment:
-      WEATHER_PROVIDER: replay
-      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_07_weather_timeline.json
-
-  flight-search-mcp:
-    environment:
-      FLIGHT_SEARCH_PROVIDER: replay
-      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_07_options.json
-
-  notification-mcp:
-    # Real SMS requires the explicit DEMO_NOTIFICATION_PROVIDER=twilio opt-in.
-    environment:
-      NOTIFICATION_PROVIDER: ${DEMO_NOTIFICATION_PROVIDER:-recording}
 
   notification-action-service:
     environment:

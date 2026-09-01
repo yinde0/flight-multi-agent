@@ -35,7 +35,7 @@ def discover_via_internal_mcp() -> dict[str, Any]:
     if completed.returncode != 0:
         raise RuntimeError(
             "Live discovery failed inside the MCP boundary; inspect sanitized "
-            "flight-status-mcp logs for the provider error code"
+            "travel-tools-mcp logs for the provider error code"
         )
     for line in reversed(completed.stdout.splitlines()):
         try:

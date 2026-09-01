@@ -1,7 +1,9 @@
 services:
   mistral-ocr-stub:
+    image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
     build:
       context: .
+      dockerfile: Dockerfile.backend
     command:
       - uvicorn
       - flight_agent.mistral_ocr_stub:app
@@ -34,22 +36,16 @@ services:
       mistral-ocr-stub:
         condition: service_healthy
 
-  flight-status-mcp:
+  travel-tools-mcp:
     environment:
       FLIGHT_STATUS_PROVIDER: replay
       AviationStack_API_KEY: local-unused
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json
-
-  weather-mcp:
-    environment:
       WEATHER_PROVIDER: replay
       OpenWeatherMap_API_KEY: local-unused
       WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_weather_timeline.json
-
-  # Golden tests must never contact a real notification provider, even when a
-  # developer's local .env enables Twilio.
-  notification-mcp:
-    environment:
+      # Golden tests must never contact a real notification provider, even when a
+      # developer's local .env enables Twilio.
       NOTIFICATION_PROVIDER: recording
 
   notification-action-service:

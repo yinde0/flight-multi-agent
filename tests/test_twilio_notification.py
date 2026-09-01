@@ -204,7 +204,7 @@ def test_uncertain_post_timeout_is_not_automatically_retried():
 
 def test_failure_contract_survives_real_fastmcp_output_and_client(monkeypatch):
     import asyncio
-    from flight_agent import notification_mcp
+    from flight_agent import travel_tools_mcp
     from flight_agent.notification_contracts import NotificationSubmissionFailure
     from flight_agent.notification_mcp_client import StreamableHttpNotificationMcpClient
 
@@ -215,9 +215,11 @@ def test_failure_contract_survives_real_fastmcp_output_and_client(monkeypatch):
         def send(self, command):
             raise NotificationSubmissionError(failure)
 
-    monkeypatch.setattr(notification_mcp, "provider", FailingProvider())
-    monkeypatch.setattr(notification_mcp.failure_gate, "enabled", lambda: False)
-    _content, structured = asyncio.run(notification_mcp.mcp.call_tool(
+    monkeypatch.setattr(travel_tools_mcp, "notification_provider", FailingProvider())
+    monkeypatch.setattr(
+        travel_tools_mcp.notification_failure_gate, "enabled", lambda: False
+    )
+    _content, structured = asyncio.run(travel_tools_mcp.mcp.call_tool(
         "send_notification", {"command": sms_command().model_dump(mode="json")},
     ))
     client = StreamableHttpNotificationMcpClient("http://never-called/mcp")
@@ -233,14 +235,18 @@ def test_failure_contract_survives_real_fastmcp_output_and_client(monkeypatch):
 
 def test_receipt_survives_real_fastmcp_union_output_and_client(monkeypatch):
     import asyncio
-    from flight_agent import notification_mcp
+    from flight_agent import travel_tools_mcp
     from flight_agent.notification import RecordingNotificationProvider
     from flight_agent.notification_mcp_client import StreamableHttpNotificationMcpClient
 
-    monkeypatch.setattr(notification_mcp, "provider", RecordingNotificationProvider())
-    monkeypatch.setattr(notification_mcp.failure_gate, "enabled", lambda: False)
+    monkeypatch.setattr(
+        travel_tools_mcp, "notification_provider", RecordingNotificationProvider()
+    )
+    monkeypatch.setattr(
+        travel_tools_mcp.notification_failure_gate, "enabled", lambda: False
+    )
     command = sms_command()
-    _content, structured = asyncio.run(notification_mcp.mcp.call_tool(
+    _content, structured = asyncio.run(travel_tools_mcp.mcp.call_tool(
         "send_notification", {"command": command.model_dump(mode="json")},
     ))
     client = StreamableHttpNotificationMcpClient("http://never-called/mcp")

@@ -43,16 +43,17 @@ Only `NOTIFY` and `NOTIFY_AND_SEARCH` are valid in the notification command.
 `SUPPRESS` cannot cross the Pydantic or JSON Schema contract. A mismatched or
 forged event is rejected before the MCP client is called.
 
-## Network isolation
+## Tool isolation
 
-`notification-mcp` has no host port, no external network, and no membership in
-the general `travel-internal` network. It is attached only to
-`notification-internal`. The Notification Action Service is the sole bridge
-between NATS/DynamoDB and that private MCP network.
+`send_notification` runs in the internal `travel-tools-mcp` server. Only the
+Notification Action Service receives its notification-scope credential. The
+Monitoring Agent receives a different credential that authorizes only flight
+status and weather, so consolidating MCP hosting does not give the monitor an
+SMS capability.
 
 This is defense in depth: schema validation protects the tool contract, DynamoDB
-verification protects decision authority, and Docker networking limits who can
-reach the capability.
+verification protects decision authority, and scoped MCP credentials limit who
+can invoke the capability.
 
 ## Idempotency and audit
 

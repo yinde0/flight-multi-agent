@@ -76,15 +76,12 @@ def post_poll(
 
 
 def provider_calls(client: httpx.Client) -> tuple[int, int]:
-    notification = client.get(
-        "http://127.0.0.1:18007/v1/reliability/audit"
-    )
-    search = client.get("http://127.0.0.1:18009/v1/reliability/audit")
-    notification.raise_for_status()
-    search.raise_for_status()
+    response = client.get("http://127.0.0.1:18003/v1/reliability/audit")
+    response.raise_for_status()
+    audit = response.json()
     return (
-        int(notification.json()["provider_call_count"]),
-        int(search.json()["provider_call_count"]),
+        int(audit["notification"]["provider_call_count"]),
+        int(audit["flight_search"]["provider_call_count"]),
     )
 
 

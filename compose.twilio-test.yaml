@@ -1,7 +1,9 @@
 services:
   twilio-stub:
+    image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
     build:
       context: .
+      dockerfile: Dockerfile.backend
     command:
       - uvicorn
       - flight_agent.twilio_stub:app
@@ -28,9 +30,9 @@ services:
       retries: 20
       start_period: 5s
     networks:
-      - notification-egress
+      - tools-egress
 
-  notification-mcp:
+  travel-tools-mcp:
     environment:
       NOTIFICATION_PROVIDER: twilio
       TWILIO_ACCOUNT_SID: ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

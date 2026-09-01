@@ -12,6 +12,32 @@ at `http://localhost:8501` when the normal Docker stack is running:
 docker compose up -d --build --wait
 ```
 
+### Build and deployment boundaries
+
+The repository has one production Compose definition and two application build
+artifacts:
+
+- `Dockerfile.backend` builds one shared Python image used by every API, agent,
+  action service, webhook, orchestrator, and MCP process. Compose supplies a
+  different startup command for each process.
+- `Dockerfile.frontend` builds only the Streamlit experience.
+- `compose.yaml` is the production deployment definition. Files named
+  `compose.*-test.yaml` and the other development overlays only replace provider
+  configuration for repeatable local evaluation; deployment pipelines must not
+  include them.
+
+`BACKEND_IMAGE` and `FRONTEND_IMAGE` may be set to immutable registry tags. A
+frontend release can then update only `traveler-ui`:
+
+```powershell
+docker compose pull traveler-ui
+docker compose up -d --no-deps --no-build traveler-ui
+```
+
+The backend release uses the same Compose file but selects only backend services,
+so it does not recreate `traveler-ui`. CodeBuild and CodeDeploy automation for
+those two release paths is intentionally kept separate.
+
 Run its focused expected-output check with:
 
 ```powershell
@@ -134,8 +160,8 @@ and `AZURE_OPENAI_DEPLOYMENT`. See
 The monitoring path now combines independently sourced flight and weather evidence:
 
 ```text
-Travel API -> A2A Monitoring Agent -> MCP Flight Status
-                                  |  -> MCP Airport Weather
+Travel API -> A2A Monitoring Agent -> Travel Tools MCP: get_flight_status
+                                  |  -> Travel Tools MCP: get_airport_weather
                                      -> DynamoDB last-known flight + weather state
                                      -> NATS disruption_candidate -> Eval Agent
                                                                    -> disruption_confirmed
@@ -172,8 +198,9 @@ See [docs/vertical-slice-04.md](docs/vertical-slice-04.md).
 ## Post-Eval notification vertical slice
 
 The next boundary consumes only `disruption_confirmed`, re-verifies the stored
-Eval decision, and calls an isolated Notification MCP. Its provider is a
-recording sink and cannot contact a real traveler.
+Eval decision, and calls the notification-scoped `send_notification` tool on the
+internal Travel Tools MCP server. Its test provider is a recording sink and
+cannot contact a real traveler.
 
 ```powershell
 docker compose -f compose.yaml -f compose.test.yaml -f compose.notification-test.yaml up --build -d --wait
@@ -211,9 +238,10 @@ Real Azure generation activates automatically when the endpoint, key, and either
 ## Read-only rebooking-search vertical slice
 
 `NOTIFY_AND_SEARCH` now wakes a separate search action service. It re-verifies
-the Eval decision in DynamoDB, reads the disrupted leg, and calls an isolated
-Flight Search MCP. The normal provider uses Duffel for priced, expiring offers;
-the checked-in deterministic replay remains the exact golden evaluation.
+the Eval decision in DynamoDB, reads the disrupted leg, and calls the
+search-scoped `search_flights` tool on the internal Travel Tools MCP server. The
+normal provider uses Duffel for priced, expiring offers; the checked-in
+deterministic replay remains the exact golden evaluation.
 
 ```powershell
 docker compose -f compose.yaml -f compose.test.yaml -f compose.search-test.yaml up --build -d --wait
@@ -444,15 +472,17 @@ Runtime output never overwrites a golden file. Expected files are intentionally 
 
 ## Intended implementation boundary
 
-The flight-status, weather, notification, and read-only flight-search MCP tools,
+The flight-status, weather, notification, and read-only flight-search tools now
+share one internal `travel-tools-mcp` server. Scoped caller credentials preserve
+least privilege: the monitor receives only status/weather access, while the
+post-Eval notification and search services receive only their action scope. The
 durable JetStream event path, transactional DynamoDB outboxes and live-state
 adapter, Monitoring Agent, Eval Agent, and post-Eval action services now exist.
 The Communication Agent has isolated model egress but no recipient, persistence,
 notification, search, or booking capability.
 Trip activation uses an RDS-compatible
 Postgres adapter and an S3-compatible document adapter; Docker supplies local
-Postgres and MinIO instances. The capability MCPs are reachable only from their
-post-evaluation action services, and `NOTIFY_AND_SEARCH` is never interpreted as
+Postgres and MinIO instances. `NOTIFY_AND_SEARCH` is never interpreted as
 permission to purchase, hold, exchange, or cancel travel. Optional distributed
 tracing and CrewAI shadow review observe these boundaries without moving decision
 authority out of the deterministic policy.

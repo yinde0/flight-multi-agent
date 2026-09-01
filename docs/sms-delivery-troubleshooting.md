@@ -13,7 +13,7 @@ including the sender setup required after upgrade.
 approved trial template when deliberately testing template delivery. That test
 does **not** demonstrate delivery of the Communication Agent's flight message.
 For custom flight messages, leave the override empty and use an eligible account
-and sender. Recreate `notification-mcp` after changing its environment, using
+and sender. Recreate `travel-tools-mcp` after changing its environment, using
 the same Compose overlays as the running stack.
 
 The manual agency demo also requires `DEMO_NOTIFICATION_PROVIDER=twilio`, a

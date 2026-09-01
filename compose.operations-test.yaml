@@ -1,29 +1,20 @@
 services:
-  flight-status-mcp:
+  travel-tools-mcp:
     environment:
       FLIGHT_STATUS_PROVIDER: replay
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_06_flight_timeline.json
-
-  weather-mcp:
-    environment:
       WEATHER_PROVIDER: replay
       WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_06_weather_timeline.json
-
-  flight-search-mcp:
-    environment:
       FLIGHT_SEARCH_PROVIDER: replay
       FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_06_options.json
-
-  notification-mcp:
-    environment:
       NOTIFICATION_FAILURE_MODE: "true"
       NOTIFICATION_CHAOS_CONTROL_ENABLED: "true"
       RELIABILITY_AUDIT_ENABLED: "true"
       OPS_API_TOKEN: slice09-test-token
     ports:
-      - "18007:8007"
+      - "18003:8003"
     networks:
-      - notification-internal
+      - travel-internal
       - operations-audit
 
   eval-agent:
@@ -59,7 +50,6 @@ services:
       - "18008:8008"
     networks:
       - travel-internal
-      - notification-internal
       - operations-audit
 
   flight-search-action-service:
@@ -86,8 +76,10 @@ services:
       - operations-audit
 
   otel-sink-stub:
+    image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
     build:
       context: .
+      dockerfile: Dockerfile.backend
     command:
       - uvicorn
       - flight_agent.otel_sink_stub:app

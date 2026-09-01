@@ -377,7 +377,7 @@ def create_notification_action_app(
 ) -> FastAPI:
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
     resolved_notifier = notifier or StreamableHttpNotificationMcpClient(
-        os.getenv("NOTIFICATION_MCP_URL", "http://127.0.0.1:8007/mcp")
+        os.getenv("TRAVEL_TOOLS_MCP_URL", "http://127.0.0.1:8003/mcp")
     )
     resolved_communicator = communicator or A2ACommunicationAgentClient(
         os.getenv("COMMUNICATION_AGENT_URL", "http://127.0.0.1:8017"),

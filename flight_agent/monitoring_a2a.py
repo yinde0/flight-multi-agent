@@ -152,15 +152,14 @@ def create_monitoring_agent_app(
     publisher: CandidatePublisher | None = None,
 ) -> FastAPI:
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
+    tools_url = os.getenv("TRAVEL_TOOLS_MCP_URL", "http://127.0.0.1:8003/mcp")
     resolved_flight_status = flight_status or StreamableHttpFlightStatusMcpClient(
-        os.getenv("FLIGHT_STATUS_MCP_URL", "http://127.0.0.1:8003/mcp")
+        tools_url
     )
     resolved_weather = weather or (
         NeutralWeatherGateway()
         if flight_status is not None
-        else StreamableHttpWeatherMcpClient(
-            os.getenv("WEATHER_MCP_URL", "http://127.0.0.1:8006/mcp")
-        )
+        else StreamableHttpWeatherMcpClient(tools_url)
     )
     resolved_publisher = publisher or NatsCandidatePublisher(
         os.getenv("NATS_URL", "nats://127.0.0.1:4222")

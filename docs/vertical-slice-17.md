@@ -93,7 +93,7 @@ SMS body uses the validated explanation, followed by the application-controlled
 next step, app reminder, and opt-out text. These fixed parts are intentionally
 not rewritten by the LLM.
 
-Recreate only `notification-mcp` with the same Compose overlays after changing
+Recreate only `travel-tools-mcp` with the same Compose overlays after changing
 this setting. Existing alerts are not resent: a new Eval-approved disruption is
 required to generate another notification. Azure failure still uses the
 fact-based fallback, and suppression and duplicate-alert rules are unchanged.

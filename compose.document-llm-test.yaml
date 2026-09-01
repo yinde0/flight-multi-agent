@@ -4,8 +4,10 @@ services:
       MISTRAL_OCR_STUB_FIXTURE: /app/travel_eval/fixtures/documents/mistral_ocr_alternate_layout_response.json
 
   azure-openai-stub:
+    image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
     build:
       context: .
+      dockerfile: Dockerfile.backend
     command:
       - uvicorn
       - flight_agent.azure_openai_stub:app

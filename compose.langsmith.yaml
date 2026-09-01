@@ -113,29 +113,7 @@ services:
       otel-collector:
         condition: service_started
 
-  flight-status-mcp:
-    environment:
-      OTEL_TRACING_ENABLED: "true"
-      OTEL_TRACE_SCOPE: "agents_mcp"
-      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
-      OTEL_HTTP_TRACE_MODE: "off"
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
-    depends_on:
-      otel-collector:
-        condition: service_started
-
-  weather-mcp:
-    environment:
-      OTEL_TRACING_ENABLED: "true"
-      OTEL_TRACE_SCOPE: "agents_mcp"
-      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
-      OTEL_HTTP_TRACE_MODE: "off"
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
-    depends_on:
-      otel-collector:
-        condition: service_started
-
-  notification-mcp:
+  travel-tools-mcp:
     environment:
       OTEL_TRACING_ENABLED: "true"
       OTEL_TRACE_SCOPE: "agents_mcp"
@@ -146,23 +124,8 @@ services:
       otel-collector:
         condition: service_started
     networks:
-      - notification-internal
       - travel-internal
-
-  flight-search-mcp:
-    environment:
-      OTEL_TRACING_ENABLED: "true"
-      OTEL_TRACE_SCOPE: "agents_mcp"
-      OTEL_INSTRUMENTATION_A2A_SDK_ENABLED: "false"
-      OTEL_HTTP_TRACE_MODE: "off"
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
-    depends_on:
-      otel-collector:
-        condition: service_started
-    networks:
-      - search-internal
-      - search-egress
-      - travel-internal
+      - tools-egress
 
   operations-service:
     environment:

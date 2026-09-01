@@ -524,16 +524,15 @@ def run_monitoring_flow(
     publisher: CandidatePublisher | None = None,
 ) -> dict[str, Any]:
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
+    tools_url = os.getenv("TRAVEL_TOOLS_MCP_URL", "http://127.0.0.1:8003/mcp")
     resolved_flight_status = flight_status or StreamableHttpFlightStatusMcpClient(
-        os.getenv("FLIGHT_STATUS_MCP_URL", "http://127.0.0.1:8003/mcp")
+        tools_url
     )
     # Explicit flight gateways are slice-03 unit-test paths. Production uses MCP.
     resolved_weather = weather or (
         NeutralWeatherGateway()
         if flight_status is not None
-        else StreamableHttpWeatherMcpClient(
-            os.getenv("WEATHER_MCP_URL", "http://127.0.0.1:8006/mcp")
-        )
+        else StreamableHttpWeatherMcpClient(tools_url)
     )
     flow = FlightMonitoringFlow(
         flight_status=resolved_flight_status,

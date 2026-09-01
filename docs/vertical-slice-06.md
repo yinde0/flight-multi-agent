@@ -83,13 +83,12 @@ when one exists, earlier departure, and stable option ID. The expected order is:
 
 No model judgment or wall-clock timing changes this order.
 
-## Network and persistence boundaries
+## Tool and persistence boundaries
 
-`flight-search-mcp` has no host port and no membership in `travel-internal`. It
-belongs to the private `search-internal` network and the dedicated
-`search-egress` network used for Duffel HTTPS calls. The Flight Search Action
-Service is the sole bridge from NATS/DynamoDB to the tool and has no search
-provider credential.
+`search_flights` runs in the internal `travel-tools-mcp` server. Only the Flight
+Search Action Service receives the search-scope credential; it does not receive
+the Duffel provider credential. Monitoring and notification callers use separate
+scopes and cannot invoke flight search.
 
 The result is stored at `DECISION#{decision_id}/SEARCH`. The
 `search:{decision_id}` idempotency key prevents a redelivered confirmed event

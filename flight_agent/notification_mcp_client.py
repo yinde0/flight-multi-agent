@@ -18,6 +18,7 @@ from flight_agent.notification_contracts import (
 from flight_agent.notification_errors import NotificationSubmissionError
 from flight_agent.telemetry import set_current_span_content, trace_headers, traced
 from flight_agent.mcp_trace_views import notification_input, notification_output
+from flight_agent.travel_tools_auth import NOTIFICATION_SCOPE, tool_call_meta
 
 
 class NotificationGateway(Protocol):
@@ -62,7 +63,11 @@ class StreamableHttpNotificationMcpClient:
             ) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
-                    result = await session.call_tool(name, arguments=arguments)
+                    result = await session.call_tool(
+                        name,
+                        arguments=arguments,
+                        meta=tool_call_meta(NOTIFICATION_SCOPE),
+                    )
         if result.isError:
             raise RuntimeError("Notification MCP tool returned an error")
         payload = result.structuredContent

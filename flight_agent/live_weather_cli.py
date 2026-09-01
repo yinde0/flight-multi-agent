@@ -22,7 +22,7 @@ def main() -> int:
     parser.add_argument("target_at", nargs="?", default=_default_target())
     args = parser.parse_args()
     client = StreamableHttpWeatherMcpClient(
-        os.getenv("WEATHER_MCP_URL", "http://weather-mcp:8006/mcp")
+        os.getenv("TRAVEL_TOOLS_MCP_URL", "http://travel-tools-mcp:8003/mcp")
     )
     observation = client.get_airport_weather(
         airport=args.airport.upper(), target_at=args.target_at

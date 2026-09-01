@@ -111,7 +111,7 @@ def main() -> int:
     }
     ops_base = "http://127.0.0.1:18012"
     eval_base = "http://127.0.0.1:18005"
-    notification_base = "http://127.0.0.1:18007"
+    travel_tools_base = "http://127.0.0.1:18003"
     action_metrics = "http://127.0.0.1:18008/metrics"
     otel_audit = "http://127.0.0.1:14318/v1/telemetry/audit"
     headers = {"x-ops-token": OPS_TOKEN}
@@ -131,18 +131,21 @@ def main() -> int:
             lambda payload: payload.get("status") == "ok",
         )
         inject_outage = client.post(
-            f"{notification_base}/v1/operations/failure-mode",
+            f"{travel_tools_base}/v1/operations/notification/failure-mode",
             headers=headers,
             json={"enabled": True},
         )
         inject_outage.raise_for_status()
         initial_provider = wait_json(
             client,
-            f"{notification_base}/v1/reliability/audit",
-            lambda payload: payload.get("failure_mode_enabled") is True,
+            f"{travel_tools_base}/v1/reliability/audit",
+            lambda payload: (
+                payload.get("notification", {}).get("failure_mode_enabled") is True
+            ),
         )
-        initial_calls = int(initial_provider["provider_call_count"])
-        initial_unique = int(initial_provider["unique_delivery_count"])
+        initial_notification = initial_provider["notification"]
+        initial_calls = int(initial_notification["provider_call_count"])
+        initial_unique = int(initial_notification["unique_delivery_count"])
         initial_action_metrics = client.get(action_metrics)
         initial_action_metrics.raise_for_status()
         initial_failed_actions = metric_value(
@@ -188,10 +191,10 @@ def main() -> int:
             observed["active_dead_letters_before_recovery"] = 1
 
             before_recovery = client.get(
-                f"{notification_base}/v1/reliability/audit"
+                f"{travel_tools_base}/v1/reliability/audit"
             )
             before_recovery.raise_for_status()
-            before_payload = before_recovery.json()
+            before_payload = before_recovery.json()["notification"]
             observed["notification_provider_calls_before_recovery"] = (
                 int(before_payload["provider_call_count"]) - initial_calls
             )
@@ -217,7 +220,7 @@ def main() -> int:
             observed["unauthorized_redrive_status"] = unauthorized.status_code
 
             repair = client.post(
-                f"{notification_base}/v1/operations/failure-mode",
+                f"{travel_tools_base}/v1/operations/notification/failure-mode",
                 headers=headers,
                 json={"enabled": False},
             )
@@ -246,10 +249,10 @@ def main() -> int:
             observed["duplicate_redrive_status"] = duplicate.json()["status"]
 
             final_provider = client.get(
-                f"{notification_base}/v1/reliability/audit"
+                f"{travel_tools_base}/v1/reliability/audit"
             )
             final_provider.raise_for_status()
-            final_payload = final_provider.json()
+            final_payload = final_provider.json()["notification"]
             observed["notification_provider_call_delta"] = (
                 int(final_payload["provider_call_count"]) - initial_calls
             )

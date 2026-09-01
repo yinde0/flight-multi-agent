@@ -1,3 +1,9 @@
+x-backend-service: &backend-service
+  image: ${BACKEND_IMAGE:-flight-multi-agent-backend:local}
+  build:
+    context: .
+    dockerfile: Dockerfile.backend
+
 services:
   postgres:
     image: postgres:16.15-alpine3.24
@@ -97,23 +103,51 @@ services:
     networks:
       - travel-internal
 
-  flight-status-mcp:
-    build:
-      context: .
+  travel-tools-mcp:
+    <<: *backend-service
     command:
       - uvicorn
-      - flight_agent.flight_status_mcp:app
+      - flight_agent.travel_tools_mcp:app
       - --host
       - 0.0.0.0
       - --port
       - "8003"
     environment:
+      TRAVEL_TOOLS_AUTH_ENABLED: "true"
+      TRAVEL_TOOLS_MONITOR_TOKEN: ${TRAVEL_TOOLS_MONITOR_TOKEN:-local-monitor-tools-token}
+      TRAVEL_TOOLS_SEARCH_TOKEN: ${TRAVEL_TOOLS_SEARCH_TOKEN:-local-search-tools-token}
+      TRAVEL_TOOLS_NOTIFICATION_TOKEN: ${TRAVEL_TOOLS_NOTIFICATION_TOKEN:-local-notification-tools-token}
       FLIGHT_STATUS_PROVIDER: ${FLIGHT_STATUS_PROVIDER:-aviationstack}
       AviationStack_API_KEY: ${AviationStack_API_KEY:-}
       AVIATIONSTACK_BASE_URL: ${AVIATIONSTACK_BASE_URL:-https://api.aviationstack.com/v1}
       AVIATIONSTACK_TIMEOUT_SECONDS: ${AVIATIONSTACK_TIMEOUT_SECONDS:-30}
       AVIATIONSTACK_INCLUDE_FLIGHT_DATE_FILTER: ${AVIATIONSTACK_INCLUDE_FLIGHT_DATE_FILTER:-false}
       FLIGHT_STATUS_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_timeline.json
+      WEATHER_PROVIDER: ${WEATHER_PROVIDER:-openweathermap}
+      OpenWeatherMap_API_KEY: ${OpenWeatherMap_API_KEY:-}
+      OPENWEATHER_BASE_URL: ${OPENWEATHER_BASE_URL:-https://api.openweathermap.org/data/2.5}
+      OPENWEATHER_TIMEOUT_SECONDS: ${OPENWEATHER_TIMEOUT_SECONDS:-30}
+      AIRPORT_COORDINATE_FIXTURE: /app/travel_eval/fixtures/airports.json
+      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_weather_timeline.json
+      FLIGHT_SEARCH_PROVIDER: ${FLIGHT_SEARCH_PROVIDER:-duffel}
+      DUFFEL_TOKEN: ${DUFFEL_TOKEN:-}
+      DUFFEL_BASE_URL: ${DUFFEL_BASE_URL:-https://api.duffel.com}
+      DUFFEL_TIMEOUT_SECONDS: ${DUFFEL_TIMEOUT_SECONDS:-30}
+      DUFFEL_SUPPLIER_TIMEOUT_MS: ${DUFFEL_SUPPLIER_TIMEOUT_MS:-10000}
+      DUFFEL_MAX_OFFERS: ${DUFFEL_MAX_OFFERS:-100}
+      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_06_options.json
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_AUTH_KEY: ${TWILIO_AUTH_KEY:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
+      TWILIO_SMS_BODY_OVERRIDE: ${TWILIO_SMS_BODY_OVERRIDE:-}
+      TWILIO_BASE_URL: ${TWILIO_BASE_URL:-https://api.twilio.com/2010-04-01}
+      TWILIO_TIMEOUT_SECONDS: ${TWILIO_TIMEOUT_SECONDS:-30}
     expose:
       - "8003"
     healthcheck:
@@ -128,44 +162,10 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - flight-egress
-
-  weather-mcp:
-    build:
-      context: .
-    command:
-      - uvicorn
-      - flight_agent.weather_mcp:app
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8006"
-    environment:
-      WEATHER_PROVIDER: ${WEATHER_PROVIDER:-openweathermap}
-      OpenWeatherMap_API_KEY: ${OpenWeatherMap_API_KEY:-}
-      OPENWEATHER_BASE_URL: ${OPENWEATHER_BASE_URL:-https://api.openweathermap.org/data/2.5}
-      OPENWEATHER_TIMEOUT_SECONDS: ${OPENWEATHER_TIMEOUT_SECONDS:-30}
-      AIRPORT_COORDINATE_FIXTURE: /app/travel_eval/fixtures/airports.json
-      WEATHER_REPLAY_FIXTURE: /app/travel_eval/fixtures/monitoring/vertical_03_weather_timeline.json
-    expose:
-      - "8006"
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/health/live', timeout=2)"
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-    networks:
-      - travel-internal
-      - weather-egress
+      - tools-egress
 
   eval-agent:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.eval_service:app
@@ -211,8 +211,7 @@ services:
       - travel-internal
 
   operations-service:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.operations_service:app
@@ -254,48 +253,8 @@ services:
     networks:
       - travel-internal
 
-  notification-mcp:
-    build:
-      context: .
-    command:
-      - uvicorn
-      - flight_agent.notification_mcp:app
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8007"
-    environment:
-      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
-      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_AUTH_KEY: ${TWILIO_AUTH_KEY:-}
-      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
-      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
-      TWILIO_STATUS_CALLBACK_URL: ${TWILIO_STATUS_CALLBACK_URL:-}
-      TWILIO_SMS_BODY_OVERRIDE: ${TWILIO_SMS_BODY_OVERRIDE:-}
-      TWILIO_BASE_URL: ${TWILIO_BASE_URL:-https://api.twilio.com/2010-04-01}
-      TWILIO_TIMEOUT_SECONDS: ${TWILIO_TIMEOUT_SECONDS:-30}
-    expose:
-      - "8007"
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/health/live', timeout=2)"
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-    networks:
-      - notification-internal
-      - notification-egress
-
   notification-webhook-service:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.notification_webhook:app
@@ -332,11 +291,10 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - notification-egress
+      - tools-egress
 
   notification-action-service:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.notification_action_service:app
@@ -351,12 +309,13 @@ services:
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
       NATS_URL: nats://nats:4222
-      NOTIFICATION_MCP_URL: http://notification-mcp:8007/mcp
+      TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
+      TRAVEL_TOOLS_NOTIFICATION_TOKEN: ${TRAVEL_TOOLS_NOTIFICATION_TOKEN:-local-notification-tools-token}
       COMMUNICATION_AGENT_URL: http://communication-agent:8017
       COMMUNICATION_AGENT_TIMEOUT_SECONDS: ${COMMUNICATION_AGENT_TIMEOUT_SECONDS:-35}
       NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-recording}
       TRIP_ORCHESTRATOR_URL: http://trip-orchestrator:8011
-      NO_PROXY: notification-mcp,communication-agent,trip-orchestrator,dynamodb-local,nats,localhost,127.0.0.1
+      NO_PROXY: travel-tools-mcp,communication-agent,trip-orchestrator,dynamodb-local,nats,localhost,127.0.0.1
     depends_on:
       dynamodb-local:
         condition: service_started
@@ -364,7 +323,7 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
-      notification-mcp:
+      travel-tools-mcp:
         condition: service_healthy
       communication-agent:
         condition: service_healthy
@@ -382,11 +341,9 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - notification-internal
 
   communication-agent:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.communication_a2a:app
@@ -419,43 +376,8 @@ services:
       - travel-internal
       - communication-egress
 
-  flight-search-mcp:
-    build:
-      context: .
-    command:
-      - uvicorn
-      - flight_agent.flight_search_mcp:app
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8009"
-    environment:
-      FLIGHT_SEARCH_PROVIDER: ${FLIGHT_SEARCH_PROVIDER:-duffel}
-      DUFFEL_TOKEN: ${DUFFEL_TOKEN:-}
-      DUFFEL_BASE_URL: ${DUFFEL_BASE_URL:-https://api.duffel.com}
-      DUFFEL_TIMEOUT_SECONDS: ${DUFFEL_TIMEOUT_SECONDS:-30}
-      DUFFEL_SUPPLIER_TIMEOUT_MS: ${DUFFEL_SUPPLIER_TIMEOUT_MS:-10000}
-      DUFFEL_MAX_OFFERS: ${DUFFEL_MAX_OFFERS:-100}
-      FLIGHT_SEARCH_REPLAY_FIXTURE: /app/travel_eval/fixtures/search/vertical_06_options.json
-    expose:
-      - "8009"
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8009/health/live', timeout=2)"
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-    networks:
-      - search-internal
-      - search-egress
-
   flight-search-action-service:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.flight_search_action_service:app
@@ -470,14 +392,15 @@ services:
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
       NATS_URL: nats://nats:4222
-      FLIGHT_SEARCH_MCP_URL: http://flight-search-mcp:8009/mcp
-      NO_PROXY: flight-search-mcp,dynamodb-local,nats,localhost,127.0.0.1
+      TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
+      TRAVEL_TOOLS_SEARCH_TOKEN: ${TRAVEL_TOOLS_SEARCH_TOKEN:-local-search-tools-token}
+      NO_PROXY: travel-tools-mcp,dynamodb-local,nats,localhost,127.0.0.1
     depends_on:
       dynamodb-local:
         condition: service_started
       eval-agent:
         condition: service_healthy
-      flight-search-mcp:
+      travel-tools-mcp:
         condition: service_healthy
       nats:
         condition: service_healthy
@@ -495,11 +418,9 @@ services:
       start_period: 10s
     networks:
       - travel-internal
-      - search-internal
 
   monitor-agent:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.monitoring_a2a:app
@@ -513,11 +434,11 @@ services:
       AWS_REGION: eu-west-2
       DYNAMODB_ENDPOINT_URL: http://dynamodb-local:8000
       MONITORING_TABLE_NAME: travel-monitoring-state
-      FLIGHT_STATUS_MCP_URL: http://flight-status-mcp:8003/mcp
-      WEATHER_MCP_URL: http://weather-mcp:8006/mcp
+      TRAVEL_TOOLS_MCP_URL: http://travel-tools-mcp:8003/mcp
+      TRAVEL_TOOLS_MONITOR_TOKEN: ${TRAVEL_TOOLS_MONITOR_TOKEN:-local-monitor-tools-token}
       MONITOR_AGENT_PUBLIC_URL: http://monitor-agent:8004
       NATS_URL: nats://nats:4222
-      NO_PROXY: flight-status-mcp,weather-mcp,dynamodb-local,nats,monitor-agent,localhost,127.0.0.1
+      NO_PROXY: travel-tools-mcp,dynamodb-local,nats,monitor-agent,localhost,127.0.0.1
     depends_on:
       dynamodb-local:
         condition: service_started
@@ -527,9 +448,7 @@ services:
         condition: service_healthy
       flight-search-action-service:
         condition: service_healthy
-      flight-status-mcp:
-        condition: service_healthy
-      weather-mcp:
+      travel-tools-mcp:
         condition: service_healthy
       nats:
         condition: service_healthy
@@ -549,8 +468,7 @@ services:
       - travel-internal
 
   document-agent:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.a2a_service:app
@@ -591,8 +509,7 @@ services:
       - document-egress
 
   trip-orchestrator:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.trip_orchestrator:app
@@ -639,8 +556,7 @@ services:
       - travel-internal
 
   travel-api:
-    build:
-      context: .
+    <<: *backend-service
     command:
       - uvicorn
       - flight_agent.api:app
@@ -678,9 +594,10 @@ services:
       - travel-edge
 
   traveler-ui:
+    image: ${FRONTEND_IMAGE:-flight-multi-agent-frontend:local}
     build:
       context: .
-      dockerfile: Dockerfile.streamlit
+      dockerfile: Dockerfile.frontend
     environment:
       TRAVEL_API_URL: http://travel-api:8000
       TRAVEL_UI_API_TIMEOUT_SECONDS: ${TRAVEL_UI_API_TIMEOUT_SECONDS:-150}
@@ -709,14 +626,7 @@ networks:
     internal: true
   travel-edge:
   document-egress:
-  flight-egress:
-  weather-egress:
-  notification-internal:
-    internal: true
-  notification-egress:
-  search-internal:
-    internal: true
-  search-egress:
+  tools-egress:
   communication-egress:
 
 volumes:

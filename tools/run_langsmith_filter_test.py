@@ -66,7 +66,7 @@ def emit_probe(*, agent_preview: bool = False) -> dict:
             expected.append("agent.communication.explain_disruption")
 
         # A real read-only MCP call exercises the new safe tool input/output view.
-        weather = StreamableHttpWeatherMcpClient("http://weather-mcp:8006/mcp").get_airport_weather(
+        weather = StreamableHttpWeatherMcpClient("http://travel-tools-mcp:8003/mcp").get_airport_weather(
             airport="LHR", target_at="2026-09-15T08:20:00Z", replay_key=root_name,
         )
         telemetry._set_span_content(root, "output", {

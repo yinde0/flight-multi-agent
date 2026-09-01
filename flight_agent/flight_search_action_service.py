@@ -208,7 +208,7 @@ def create_flight_search_action_app(
 ) -> FastAPI:
     resolved_store = store or DynamoMonitoringStateStore.from_environment()
     resolved_gateway = search_gateway or StreamableHttpFlightSearchMcpClient(
-        os.getenv("FLIGHT_SEARCH_MCP_URL", "http://127.0.0.1:8009/mcp")
+        os.getenv("TRAVEL_TOOLS_MCP_URL", "http://127.0.0.1:8003/mcp")
     )
 
     @asynccontextmanager

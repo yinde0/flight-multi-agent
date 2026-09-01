@@ -16,6 +16,7 @@ from flight_agent.monitoring_contracts import (
 )
 from flight_agent.telemetry import trace_headers, traced
 from flight_agent.mcp_trace_views import flight_status_input, flight_status_output, live_sample_output
+from flight_agent.travel_tools_auth import MONITOR_SCOPE, tool_call_meta
 
 
 class FlightStatusGateway(Protocol):
@@ -80,7 +81,11 @@ class StreamableHttpFlightStatusMcpClient:
             ) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
-                    result = await session.call_tool(name, arguments=arguments)
+                    result = await session.call_tool(
+                        name,
+                        arguments=arguments,
+                        meta=tool_call_meta(MONITOR_SCOPE),
+                    )
 
         if result.isError:
             raise RuntimeError("Flight-status MCP tool returned an error")
