@@ -6,8 +6,6 @@ from typing import Any, Protocol
 import nats
 
 from flight_agent.event_delivery import (
-    DISRUPTION_CANDIDATE_SUBJECT,
-    DISRUPTION_CONFIRMED_SUBJECT,
     candidate_outbox,
     ensure_event_stream,
     publish_durable_event,

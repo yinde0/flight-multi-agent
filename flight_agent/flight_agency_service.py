@@ -5,7 +5,6 @@ import hmac
 import os
 import threading
 
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 

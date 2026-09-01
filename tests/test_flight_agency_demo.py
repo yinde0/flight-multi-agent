@@ -13,7 +13,6 @@ from flight_agent.flight_agency_contracts import (
     AgencyFlightCollection,
     AgencyFlightDetails,
     AgencyFlightMutation,
-    AgencyFlightSeed,
     AgencyFlightView,
 )
 from flight_agent.flight_agency_service import (

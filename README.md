@@ -1,5 +1,7 @@
 # Travel Disruption Evaluation Package
 
+[![CI](https://github.com/yinde0/flight-multi-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/yinde0/flight-multi-agent/actions/workflows/ci.yml)
+
 This repository starts with the testable specification for an itinerary parsing and disruption-monitoring system. Its executable vertical paths now parse native-text and image-only PDFs, then statefully monitor flight-status changes and evaluate whether they are significant.
 
 ## Traveler frontend
@@ -434,6 +436,23 @@ The CLI exits non-zero when an automated acceptance threshold fails. Use `--show
 ```powershell
 python -m travel_eval.runner --show-results
 ```
+
+## Continuous integration
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs for every pull
+request to `main`, every push to `main`, and manual dispatches. It requires:
+
+- Ruff lint checks.
+- The complete pytest unit suite.
+- The golden replay acceptance thresholds.
+- Validation of the production Compose definition and every replay overlay.
+- Successful builds of both Docker images.
+
+To prevent unverified changes from reaching `main`, configure a GitHub branch
+ruleset for `main` that requires a pull request and the following status checks:
+`Lint`, `Unit and golden tests`, `Compose validation`, and `Container builds`.
+Direct pushes must be disabled in the ruleset; a workflow can report a failed
+push, but only repository rules can reject it before it reaches `main`.
 
 ## Regenerate PDF fixtures
 
