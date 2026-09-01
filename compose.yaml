@@ -104,7 +104,10 @@ services:
       - travel-internal
 
   travel-tools-mcp:
-    <<: *backend-service
+    image: ${MCP_IMAGE:-flight-multi-agent-mcp:local}
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
     command:
       - uvicorn
       - flight_agent.travel_tools_mcp:app

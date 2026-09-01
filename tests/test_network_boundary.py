@@ -8,6 +8,19 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_unified_mcp_uses_a_dedicated_image() -> None:
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    services = compose["services"]
+    mcp = services["travel-tools-mcp"]
+
+    assert mcp["image"] == "${MCP_IMAGE:-flight-multi-agent-mcp:local}"
+    assert mcp["build"]["dockerfile"] == "Dockerfile.mcp"
+    assert services["eval-agent"]["image"] == (
+        "${BACKEND_IMAGE:-flight-multi-agent-backend:local}"
+    )
+    assert (ROOT / "Dockerfile.mcp").is_file()
+
+
 def test_only_unified_mcp_service_has_external_provider_egress() -> None:
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
     services = compose["services"]

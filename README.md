@@ -16,29 +16,39 @@ docker compose up -d --build --wait
 
 ### Build and deployment boundaries
 
-The repository has one production Compose definition and two application build
+The repository has one production Compose definition and three application build
 artifacts:
 
-- `Dockerfile.backend` builds one shared Python image used by every API, agent,
-  action service, webhook, orchestrator, and MCP process. Compose supplies a
-  different startup command for each process.
+- `Dockerfile.backend` builds one shared Python image used by the API, agents,
+  action services, webhook, and orchestrator. Compose supplies a different
+  startup command for each process.
+- `Dockerfile.mcp` builds the unified tools and internet-egress service as an
+  independent image with its own default MCP startup command.
 - `Dockerfile.frontend` builds only the Streamlit experience.
 - `compose.yaml` is the production deployment definition. Files named
   `compose.*-test.yaml` and the other development overlays only replace provider
   configuration for repeatable local evaluation; deployment pipelines must not
   include them.
 
-`BACKEND_IMAGE` and `FRONTEND_IMAGE` may be set to immutable registry tags. A
-frontend release can then update only `traveler-ui`:
+`BACKEND_IMAGE`, `MCP_IMAGE`, and `FRONTEND_IMAGE` may be set to immutable
+registry tags. A frontend release can then update only `traveler-ui`:
 
 ```powershell
 docker compose pull traveler-ui
 docker compose up -d --no-deps --no-build traveler-ui
 ```
 
-The backend release uses the same Compose file but selects only backend services,
-so it does not recreate `traveler-ui`. CodeBuild and CodeDeploy automation for
-those two release paths is intentionally kept separate.
+An MCP release is equally isolated:
+
+```powershell
+docker compose pull travel-tools-mcp
+docker compose up -d --no-deps --no-build travel-tools-mcp
+```
+
+The backend release uses the same Compose file but selects only the API, agents,
+action services, webhook, and orchestrator, so it does not recreate either
+`traveler-ui` or `travel-tools-mcp`. CodeBuild and deployment automation should
+keep the frontend, backend, and MCP release paths separate.
 
 AWS tasks set `EVENT_BUS_PROVIDER=sqs`, while local Compose keeps NATS. All
 provider internet calls and the LangSmith OTLP relay terminate at the unified

@@ -1,9 +1,26 @@
 # AWS runtime boundaries
 
-The production application uses the same backend image for every backend ECS
-service, but each task has a different command, IAM role, security group, and
-environment. `EVENT_BUS_PROVIDER=sqs` selects SQS; local Compose keeps
-`EVENT_BUS_PROVIDER=nats`.
+The production application has a dedicated MCP image and a shared image for the
+remaining backend ECS services. Each task still has its own command, IAM role,
+security group, and environment. Build and deploy the MCP ECS service from
+`Dockerfile.mcp`; build the API, agents, action services, webhook, and
+orchestrator from `Dockerfile.backend`. `EVENT_BUS_PROVIDER=sqs` selects SQS;
+local Compose keeps `EVENT_BUS_PROVIDER=nats`.
+
+## Image and service boundaries
+
+Publish three images to separate ECR repositories:
+
+| Image | Dockerfile | ECS services |
+| --- | --- | --- |
+| Frontend | `Dockerfile.frontend` | `traveler-ui` |
+| Backend | `Dockerfile.backend` | Travel API, agents, action services, webhook, orchestrator |
+| MCP | `Dockerfile.mcp` | `travel-tools-mcp` only |
+
+The MCP pipeline registers a new revision only for the MCP task definition and
+updates only the `travel-tools-mcp` ECS service. Backend and frontend releases do
+not rebuild or restart it. Likewise, an MCP release does not modify the frontend
+or remaining backend services.
 
 ## SQS topology
 
