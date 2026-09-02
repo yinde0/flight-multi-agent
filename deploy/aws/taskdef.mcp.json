@@ -1,0 +1,172 @@
+{
+  "family": "travel-dev-mcp",
+  "executionRoleArn": "arn:aws:iam::REPLACE_ACCOUNT_ID:role/travel-dev-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::REPLACE_ACCOUNT_ID:role/travel-dev-mcp-task-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "travel-tools-mcp",
+      "image": "REPLACE_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/flight-multi-agent-mcp:REPLACE_IMAGE_TAG",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "mcp-http",
+          "containerPort": 8003,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "AWS_REGION",
+          "value": "eu-west-2"
+        },
+        {
+          "name": "DEPLOYMENT_ENVIRONMENT",
+          "value": "production"
+        },
+        {
+          "name": "EXTERNAL_CALLS_PROVIDER",
+          "value": "direct"
+        },
+        {
+          "name": "TRAVEL_TOOLS_AUTH_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "FLIGHT_STATUS_PROVIDER",
+          "value": "aviationstack"
+        },
+        {
+          "name": "WEATHER_PROVIDER",
+          "value": "openweathermap"
+        },
+        {
+          "name": "FLIGHT_SEARCH_PROVIDER",
+          "value": "duffel"
+        },
+        {
+          "name": "NOTIFICATION_PROVIDER",
+          "value": "twilio"
+        },
+        {
+          "name": "LANGSMITH_ENDPOINT",
+          "value": "https://api.smith.langchain.com"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "TRAVEL_TOOLS_MONITOR_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_MONITOR_TOKEN::"
+        },
+        {
+          "name": "TRAVEL_TOOLS_SEARCH_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_SEARCH_TOKEN::"
+        },
+        {
+          "name": "TRAVEL_TOOLS_NOTIFICATION_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_NOTIFICATION_TOKEN::"
+        },
+        {
+          "name": "TRAVEL_TOOLS_DOCUMENT_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_DOCUMENT_TOKEN::"
+        },
+        {
+          "name": "TRAVEL_TOOLS_COMMUNICATION_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_COMMUNICATION_TOKEN::"
+        },
+        {
+          "name": "TRAVEL_TOOLS_EVAL_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_EVAL_TOKEN::"
+        },
+        {
+          "name": "TRAVEL_TOOLS_TELEMETRY_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TRAVEL_TOOLS_TELEMETRY_TOKEN::"
+        },
+        {
+          "name": "MISTRAL_API_KEY",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:MISTRAL_API_KEY::"
+        },
+        {
+          "name": "AviationStack_API_KEY",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:AviationStack_API_KEY::"
+        },
+        {
+          "name": "OpenWeatherMap_API_KEY",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:OpenWeatherMap_API_KEY::"
+        },
+        {
+          "name": "DUFFEL_TOKEN",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:DUFFEL_TOKEN::"
+        },
+        {
+          "name": "TWILIO_ACCOUNT_SID",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TWILIO_ACCOUNT_SID::"
+        },
+        {
+          "name": "TWILIO_API_KEY",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TWILIO_API_KEY::"
+        },
+        {
+          "name": "TWILIO_API_SECRET",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TWILIO_API_SECRET::"
+        },
+        {
+          "name": "TWILIO_FROM_NUMBER",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:TWILIO_FROM_NUMBER::"
+        },
+        {
+          "name": "AZURE_ENDPOINT",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:AZURE_ENDPOINT::"
+        },
+        {
+          "name": "AZURE_API_KEY",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:AZURE_API_KEY::"
+        },
+        {
+          "name": "CHAT_DEPLOYMENT",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:CHAT_DEPLOYMENT::"
+        },
+        {
+          "name": "CHAT_API_VERSION",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:CHAT_API_VERSION::"
+        },
+        {
+          "name": "LANGSMITH_API_KEY",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:LANGSMITH_API_KEY::"
+        },
+        {
+          "name": "LANGSMITH_PROJECT",
+          "valueFrom": "REPLACE_APPLICATION_SECRET_ARN:LANGSMITH_PROJECT::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health/live', timeout=2)\" || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/travel-dev/mcp",
+          "awslogs-region": "eu-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

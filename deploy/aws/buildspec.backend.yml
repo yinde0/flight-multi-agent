@@ -1,0 +1,35 @@
+version: 0.2
+
+env:
+  variables:
+    IMAGE_REPOSITORY_NAME: flight-multi-agent-backend
+    IMAGE_DOCKERFILE: Dockerfile.backend
+
+phases:
+  install:
+    runtime-versions:
+      python: "3.12"
+    commands:
+      - python -m pip install --disable-pip-version-check ".[app,validation,pdf-fixtures,test,ui,quality]"
+
+  pre_build:
+    commands:
+      - python -m ruff check flight_agent flight_ui travel_eval tests tools
+      - python -m pytest -q
+      - python -m travel_eval.runner
+      - test -n "${CODEBUILD_RESOLVED_SOURCE_VERSION:-}"
+      - AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+      - IMAGE_REPOSITORY_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPOSITORY_NAME}"
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+
+  build:
+    commands:
+      - IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION}"
+      - IMAGE_REPOSITORY_URI="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPOSITORY_NAME}"
+      - docker build --pull --file "${IMAGE_DOCKERFILE}" --tag "${IMAGE_REPOSITORY_URI}:${IMAGE_TAG}" .
+
+  post_build:
+    commands:
+      - IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION}"
+      - IMAGE_REPOSITORY_URI="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPOSITORY_NAME}"
+      - docker push "${IMAGE_REPOSITORY_URI}:${IMAGE_TAG}"

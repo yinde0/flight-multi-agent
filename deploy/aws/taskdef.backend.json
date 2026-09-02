@@ -1,0 +1,82 @@
+{
+  "family": "travel-dev-api",
+  "executionRoleArn": "arn:aws:iam::REPLACE_ACCOUNT_ID:role/travel-dev-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::REPLACE_ACCOUNT_ID:role/travel-dev-core-task-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "travel-api",
+      "image": "REPLACE_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/flight-multi-agent-backend:REPLACE_IMAGE_TAG",
+      "essential": true,
+      "command": [
+        "uvicorn",
+        "flight_agent.api:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "portMappings": [
+        {
+          "name": "travel-api-http",
+          "containerPort": 8000,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "DEPLOYMENT_ENVIRONMENT",
+          "value": "production"
+        },
+        {
+          "name": "DOCUMENT_AGENT_URL",
+          "value": "http://document-agent:8001"
+        },
+        {
+          "name": "MONITOR_AGENT_URL",
+          "value": "http://monitor-agent:8004"
+        },
+        {
+          "name": "TRIP_ORCHESTRATOR_URL",
+          "value": "http://trip-orchestrator:8011"
+        },
+        {
+          "name": "SCHEDULER_CONTROL_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "FLIGHT_AGENCY_DEMO_ENABLED",
+          "value": "false"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)\" || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/travel-dev/backend",
+          "awslogs-region": "eu-west-2",
+          "awslogs-stream-prefix": "travel-api"
+        }
+      }
+    }
+  ]
+}

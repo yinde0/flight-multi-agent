@@ -1,0 +1,57 @@
+{
+  "family": "travel-dev-frontend",
+  "executionRoleArn": "arn:aws:iam::REPLACE_ACCOUNT_ID:role/travel-dev-ecs-execution-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "traveler-ui",
+      "image": "REPLACE_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/flight-multi-agent-frontend:REPLACE_IMAGE_TAG",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "streamlit-http",
+          "containerPort": 8501,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "TRAVEL_API_URL",
+          "value": "REPLACE_TRAVEL_API_URL"
+        },
+        {
+          "name": "TRAVEL_UI_API_TIMEOUT_SECONDS",
+          "value": "150"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=2)\" || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/travel-dev/frontend",
+          "awslogs-region": "eu-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
